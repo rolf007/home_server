@@ -36,11 +36,12 @@ my_commands = ["ping"]
 sms_portal_ip = ""
 sms_portal_port = 0
 
-ip_list = [{"name": "alpha", "ip": "172.16.4.73", "online": False},
-        {"name": "beta", "ip": "172.16.4.74", "online": False},
-        {"name": "gamma", "ip": "172.16.4.75", "online": False}]
-ip_list = [{"name": "S", "ip": "192.168.0.44", "online": False},
-        {"name": "A", "ip": "192.168.0.20", "online": False}]
+ip_list = [{"name": "alpha", "ip": "172.16.4.73"},
+        {"name": "beta", "ip": "172.16.4.74"},
+        {"name": "gamma", "ip": "172.16.4.75"}]
+ip_list = [{"name": "S", "ip": "192.168.0.44"},
+        {"name": "A", "ip": "192.168.0.20"},
+        {"name": "Rxfce", "ip": "192.168.0.11"}]
 devnull = open(os.devnull, 'w')
 
 def send_sms(text):
@@ -74,14 +75,14 @@ class PingThread(object):
                 for ip in ip_list:
                     x = subprocess.call("ping -c1 -w1 %s" % ip["ip"], shell=True, stdout=devnull)
                     if x == 0:
-                        if "online" not in ip or ip["online"] == False:
+                        if "online" in ip and ip["online"] == False:
                             ip_went_online(ip["name"])
                         ip["online"] = True
                     else:
                         ip["online"] = False
                 f.write(strftime("%Y-%m-%d_%H:%M:%S", localtime()))
                 for r in ip_list:
-                    f.write(" %d" % (1 if r["online"] else 0))
+                    f.write(" %d" % (1 if "online" in r and r["online"] else 0))
                 f.write("\n")
 
             time.sleep(self.interval)
@@ -89,7 +90,7 @@ class PingThread(object):
 class CheckFileThread(object):
     def __init__(self, interval=1):
         self.interval = interval
-        self.exists = False
+        self.exists = None
 
         thread = threading.Thread(target=self.run, args=())
         thread.daemon = True                            # Daemonize thread
@@ -138,12 +139,12 @@ class BroadcastListener(object):
 def hello():
     str = ""
     for r in ip_list:
-        str += " %s" % (r["name"] if r["online"] else "")
+        str += " %s" % (r["name"] if "online" in r and r["online"] else "")
     return "Hello World!" + str
 
 
 if __name__ == '__main__':
     ping_thread = PingThread(60)
-    #check_file_thread = CheckFileThread(3)
+    check_file_thread = CheckFileThread(3)
     broadcastListener = BroadcastListener();
-    app.run(host="0.0.0.0", port=my_port)
+    app.run(host="0.0.0.0", port=my_port, threaded=True)

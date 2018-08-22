@@ -8,6 +8,7 @@
 #Receive Sms:
 # curl "http://asmund.dk:5000/somepage?receivedutcdatetime=time&receivedfromphonenumber=from&receivedbyphonenumber=by&body=body"
 
+
 import socket
 
 from time import strftime, localtime, sleep
@@ -24,6 +25,10 @@ import argparse
 
 sys.path.append("../server_shared")
 import server_shared
+
+##res = requests.get("https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=L8wS8C77&to=+4526857540&Text=%s" % "outofmoney", timeout=2)
+##print("res '%s'" % res)
+##exit(0)
 
 
 import logging
@@ -84,6 +89,7 @@ def send_sms():
     if args.pay:
         print("sending sms: '" + body + "'")
         res = requests.get("https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=L8wS8C77&to=+4526857540&Text=%s" % body, timeout=2)
+        print("res '%s'" % res)
     else:
         print("would have sent sms: '" + body + "'")
     return "message sent"
@@ -109,5 +115,5 @@ if __name__ == '__main__':
 
 
     example = Broadcaster(3)
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000, threaded=True)
 
