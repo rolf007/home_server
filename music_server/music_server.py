@@ -4,6 +4,7 @@
 #import unicodedata
 #print(unicodedata.name(chr(128514)))
 #FACE WITH TEARS OF JOY
+#emerge -av1 qdbus
 
 import subprocess
 import os
@@ -31,7 +32,7 @@ import logging
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
-my_port = 5002
+my_port = 9898
 my_ip = server_shared.get_ip()
 my_commands = ["play"]
 sms_portal_ip = ""
@@ -131,11 +132,12 @@ class BroadcastListener(object):
                     print("failed to send %s" % e)
 
 def scan_collection():
-    mypath = "/home/rolf/Downloads"
+    mypath = "/home/rolf/sfx"
     urls = [os.path.join(mypath, f) for f in listdir(mypath) if isfile(join(mypath, f)) and f.endswith(".mp3")]
     for url in urls:
         audiofile = eyed3.load(url)
-        music_collection.append({"title":audiofile.tag.title, "artist":audiofile.tag.artist, "url":"file://"+url})
+        if audiofile.tag:
+            music_collection.append({"title":audiofile.tag.title, "artist":audiofile.tag.artist, "url":"file://"+url})
 
 
 scan_collection()
@@ -149,11 +151,13 @@ def hello():
     best_score = -1.0
     for music in music_collection:
         title = music["title"]
+        if not title:
+            continue
         score = fuzzy_substring(query.lower(), title.lower())
         if score < best_score or best_score == -1.0:
             best_score = score
             best_match = music
-    subprocess.call("qdbus org.mpris.MediaPlayer2.vlc /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri %s" % best_match["url"], shell=True, stdout=devnull)
+    subprocess.call("qdbus org.mpris.MediaPlayer2.vlc /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri \"%s\"" % best_match["url"], shell=True, stdout=devnull)
     print("playing: '" + best_match["artist"] + " - " + best_match["title"] + "' (" + best_match["url"] + ")")
     return "playing: '" + best_match["artist"] + " - " + best_match["title"] + "'"
 

@@ -30,7 +30,7 @@ import logging
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
-my_port = 5001
+my_port = 9898
 my_ip = server_shared.get_ip()
 my_commands = ["ping"]
 sms_portal_ip = ""
