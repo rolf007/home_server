@@ -9,8 +9,6 @@ import time
 import os
 import re
 
-pygame.init()
-pygame.display.set_mode((100,100))
 devnull = open(os.devnull, 'w')
 #seq0 = KeyPress.compile("Aa1000-3000*Aa<foo>", foo=lambda: print("SUCCES foo"))
 #seq1 = KeyPress.compile("Bb1000-3000*Bb<bar>", bar=lambda: print("SUCCES bar"))
@@ -42,6 +40,8 @@ class RaspberryInputter:
 class PyGameInputter:
     def __init__(self):
         super(PyGameInputter, self).__init__()
+        pygame.init()
+        pygame.display.set_mode((100,100))
 
     def main_loop(self):
         while True:
@@ -70,6 +70,16 @@ class PyGameInputter:
                     if event.key == pygame.K_c:
                         c = 'c'
                     self.key_input(c, False)
+
+class BInputter:
+    def __init__(self):
+        super(BInputter, self).__init__()
+
+    def main_loop(self):
+        self.key_input('B', True)
+        self.key_input('b', False)
+        while True:
+            time.sleep(1)
 
 class MorseMaker:
     def __init__(self, down, up, t0, t1):
@@ -195,7 +205,7 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
     def __init__(self):
         super(RaspberryRadio, self).__init__()
         self.main_menu = KeyPress.mkUnion([
-            KeyPress.compile(".A.a<match>", match=lambda: self.youtube("metallica+hit+the+lights")),
+            KeyPress.compile(".A.a<match>", match=lambda: self.youtube_play()),
             KeyPress.compile(".B.b<match>", match=lambda: self.radio_play()),
             KeyPress.compile(".B.A.a.b<match>", match=lambda: self.radio_channel(0)),
             KeyPress.compile(".B.C.c.b<match>", match=lambda: self.radio_channel(1)),
@@ -210,6 +220,7 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
                 )
         self.radio = Radio()
         self.multicast_receiver = MulticastReceiver()
+        self.youtube = Youtube()
         self.go_to_main_menu()
 
     def go_to_main_menu(self):
@@ -219,22 +230,6 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
         print("going to morse...")
         self.key_press = KeyPress(self.morse_menu)
         self.morse_input = ""
-
-    def youtube(self, search):
-        p = subprocess.Popen("wget \"https://www.youtube.com/results?search_query=%s\" -O -" % search, shell=True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-        stdout, stderr = p.communicate()
-        #print("stdout = '%s'" % stdout)
-        print("stderr = '%s'" % stderr)
-        m = re.search('href="/watch\?v=([^"]*)"', stdout.decode('ascii', errors="ignore"))
-        
-        if m:
-            print('First number found = {}'.format(m.group()))
-            print('First number found = {}'.format(m[1]))
-            print("firefox-bin https://www.youtube.com/watch?v=%s" % m[1])
-            p = subprocess.Popen("firefox-bin https://www.youtube.com/watch?v=%s" % m[1], shell=True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-            stdout, stderr = p.communicate()
-        else:
-            print('Not Found')
 
 
     def end_morse(self):
@@ -262,19 +257,29 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
                 print("failed to send %s" % e)
         self.set_source("multicast")
 
+    def youtube_play(self):
+        self.set_source("youtube")
+
     def shut_down(self):
         self.set_source(None)
 
     def set_source(self, source):
         if source == "radio":
             self.multicast_receiver.stop()
+            self.youtube.stop()
             self.radio.start()
         elif source == "multicast":
             self.radio.stop()
+            self.youtube.stop()
             self.multicast_receiver.start()
+        elif source == "youtube":
+            self.radio.stop()
+            self.multicast_receiver.stop()
+            self.youtube.start()
         else:
             self.radio.stop()
             self.multicast_receiver.stop()
+            self.youtube.stop()
 
 class MulticastReceiver(object):
     def __init__(self):
@@ -314,7 +319,9 @@ class Radio(object):
         print("playing radio...")
         if self.p:
             self.stop()
-        self.p = subprocess.Popen("vlc --intf dummy %s" % self.channels[self.channel], shell=True, stdout=devnull, stderr=devnull)
+        #self.p = subprocess.Popen("vlc --intf dummy %s" % self.channels[self.channel], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.check_output("printenv > bad" , shell=True)
+        self.p = subprocess.Popen("cvlc %s" % self.channels[self.channel], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 #https://www.radio24syv.dk/hoer-radio-paa-din-computer
 #24syv vlc http://streaming.radio24syv.dk/pls/24syv_96_IR.pls
 #https://www.dr.dk/hjaelp/digtal-radio/direkte-links-til-dr-radio-paa-nettet
@@ -327,6 +334,39 @@ class Radio(object):
             return
         print("stopping radio...")
         self.p.terminate()
+        print(self.p.communicate())
+        self.p = None
+
+class Youtube:
+    def __init__(self):
+        self.p = None
+
+    def start(self):
+        print("playing youtube...")
+        search = "metallica+hit+the+lights"
+        if self.p:
+            self.stop()
+
+        p = subprocess.Popen("wget \"https://www.youtube.com/results?search_query=%s\" -O -" % search, shell=True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+        stdout, stderr = p.communicate()
+        #print("stdout = '%s'" % stdout)
+        print("stderr = '%s'" % stderr)
+        m = re.search('href="/watch\?v=([^"]*)"', stdout.decode('ascii', errors="ignore"))
+        
+        if m:
+            print('First number found = {}'.format(m.group()))
+            print('First number found = {}'.format(m[1]))
+            print("cvlc https://www.youtube.com/watch?v=%s" % m[1])
+            self.p = subprocess.Popen("cvlc https://www.youtube.com/watch?v=%s" % m[1], shell=True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+        else:
+            print('Not Found')
+
+    def stop(self):
+        if self.p == None:
+            return
+        print("stopping youtube...")
+        self.p.terminate()
+        print(self.p.communicate())
         self.p = None
 
 it_test = RaspberryRadio()
