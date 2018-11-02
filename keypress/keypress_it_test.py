@@ -40,7 +40,7 @@ class RaspberryInputter:
 class PyGameInputter:
     def __init__(self):
         super(PyGameInputter, self).__init__()
-        pygame.init()
+        pygame.display.init()
         pygame.display.set_mode((100,100))
 
     def main_loop(self):
@@ -352,12 +352,19 @@ class Youtube:
         #print("stdout = '%s'" % stdout)
         print("stderr = '%s'" % stderr)
         m = re.search('href="/watch\?v=([^"]*)"', stdout.decode('ascii', errors="ignore"))
+        #cvlc https://www.youtube.com/watch?v=863fYC-Mb_QI
+        # /etc/portage/package.use/vlc :
+        #media-video/vlc live lua matroska theora upnp
+        # https://github.com/rg3/youtube-dl
+        # python -m youtube_dl -x --audio-format mp3 gsoNl0MzDFA -o '%(artist)s - %(title)s.%(ext)s'
+        # python -m youtube_dl ytsearch:"metallica jump in the fire" -o 'foo2'
+
         
         if m:
             print('First number found = {}'.format(m.group()))
             print('First number found = {}'.format(m[1]))
             print("cvlc https://www.youtube.com/watch?v=%s" % m[1])
-            self.p = subprocess.Popen("cvlc https://www.youtube.com/watch?v=%s" % m[1], shell=True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+            self.p = subprocess.Popen("cvlc --intf dummy https://www.youtube.com/watch?v=%s" % m[1], shell=True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
         else:
             print('Not Found')
 
