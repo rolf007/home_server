@@ -5,7 +5,19 @@ import struct
 import threading
 import time
 import uuid
+import urllib
 
+def get_ip():
+    s = socket(AF_INET, SOCK_DGRAM)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
 
 class UnicastListener():
     def __init__(self, cb, port):
@@ -56,13 +68,12 @@ class UnicastSender():
     def __init__(self):
         pass
 
-    def send(self, port, service, function, args):
+    def send(self, ip, port, function, args):
         s = socket(AF_INET, SOCK_STREAM)
-        host = "127.0.0.1"
 
         try:
-            s.connect((host, port))
-            s.sendall(bytes("GET /%s&%s HTTP/1.1\r\nHost: %s\r\n\r\n" % (function, args, host), 'ascii'))
+            s.connect((ip, port))
+            s.sendall(bytes("GET /%s?%s HTTP/1.1\r\nHost: %s\r\n\r\n" % (function, urllib.parse.urlencode(args, doseq=True), ip), 'ascii'))
             ret = "undefined"
             r = s.recv(4096)
             a = r.find(b' ')
@@ -125,13 +136,14 @@ class MulticastSender():
         start_sleep = random.randint(500,1000)/1000.0
         self.timer = threading.Timer(start_sleep, self.send_whos_there)
         self.timer.start()
+        self.ip = get_ip()
 
     def send_whos_there(self):
         whos_there = json.dumps({"cmd": "whos_there", "uuid": str(self.uuid)})
         self.multicast(whos_there)
 
     def send_im_here(self, port):
-        whos_there = json.dumps({"cmd": "im_here", "uuid": str(self.uuid), "port": port, "service": self.service_name, "functions": self.functions})
+        whos_there = json.dumps({"cmd": "im_here", "uuid": str(self.uuid), "port": port, "service": self.service_name, "functions": self.functions, "ip": self.ip})
         self.multicast(whos_there)
 
     def multicast(self, msg):
@@ -154,23 +166,24 @@ class Comm():
     def __init__(self, service_name, functions):
         self.functions = functions
         self.port = None
-        self.other_port = None
+        self.others = {}
         self.uuid = uuid.uuid4()
         self.multicast_listener = MulticastListener(lambda data: self.mc_received(data))
         self.multicast_sender = MulticastSender(self.uuid, service_name, list(functions.keys()))
         self.unicast_listener = None
-        self.unicast_sender = None
+        self.unicast_sender = UnicastSender()
         start_sleep = random.randint(3000,3500)/1000.0
         self.timer = threading.Timer(start_sleep, self.configure_unicast)
         self.timer.start()
 
     def uc_received(self, data):
         print("uc_received '%s'" % data)
-        a = data.find(b'&')
-        if a != -1:
-            func = data[:a]
-            args = data[a+1:]
-            return self.functions[func.decode('ascii')](args)
+        query = urllib.parse.urlsplit(data).query
+        func  = urllib.parse.urlsplit(data).path.decode('ascii')
+        params = urllib.parse.parse_qs(query)
+        if func in self.functions:
+            return self.functions[func](params)
+        return None
 
     def mc_received(self, data):
         recv_uuid = uuid.UUID(data["uuid"])
@@ -181,20 +194,18 @@ class Comm():
             if self.port:
                 self.multicast_sender.send_im_here(self.port)
         if data["cmd"] == "im_here":
-            self.other_port = data["port"]
-            self.other_service = data["service"]
-            self.other_functions = data["functions"]
+            self.others[recv_uuid] = {"port": data["port"], "service": data["service"], "functions": data["functions"], "ip": data["ip"]}
 
 
     def configure_unicast(self):
         self.port = random.randint(5000,5999)
         self.unicast_listener = UnicastListener(lambda data: self.uc_received(data), self.port)
-        self.unicast_sender = UnicastSender()
         self.multicast_sender.send_im_here(self.port)
 
     def call(self, service, function, args):
-        if self.port and self.other_port:
-            return self.unicast_sender.send(self.other_port, service, function, args)
+        for other in self.others:
+            if self.others[other]["service"] == service:
+                return self.unicast_sender.send(self.others[other]["ip"], self.others[other]["port"], function, args)
         return "not ready"
 
     def shut_down(self):

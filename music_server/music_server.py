@@ -15,28 +15,20 @@ import eyed3
 from time import strftime, localtime, sleep
 
 import time
-import socket
 from os import listdir
 from os.path import isfile, join
 
-from flask import Flask, request
-app = Flask(__name__)
 
 import threading
-import requests
 
-sys.path.append("../server_shared")
-import server_shared
+sys.path.append("../comm")
+from comm import Comm
 
 import logging
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
-my_port = 9898
-my_ip = server_shared.get_ip()
-my_commands = ["play"]
-sms_portal_ip = ""
-sms_portal_port = 0
+#my_ip = server_shared.get_ip()
 
 devnull = open(os.devnull, 'w')
 
@@ -75,19 +67,6 @@ def fuzzy_substring(needle, haystack):
     return min(row1)
 
 
-def send_sms(text):
-    print("sending sms '%s'..." % text)
-    if sms_portal_ip == "" or sms_portal_port == 0:
-        print("Can't send sms. Sms portal ip/port unknown %s:%d" % (sms_portal_ip, sms_portal_port))
-        return
-    try:
-        res = requests.get('http://%s:%d/send_sms?body=%s' % (sms_portal_ip, sms_portal_port, text), timeout=2)
-    except requests.ConnectionError as e:
-        print("failed to send %s" % e)
-
-def ip_went_online(name):
-    send_sms("%s%%20went%%20online" % name)
-
 class VlcThread(object):
     def __init__(self):
 
@@ -103,50 +82,26 @@ class VlcThread(object):
         #play:
         #qdbus org.mpris.MediaPlayer2.vlc /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri file:///home/rolf/Downloads/droid3_newfirmware.mp3
 
-class BroadcastListener(object):
-    def __init__(self, interval=1):
-        self.client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
-        self.client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        self.client.bind(("", 37020))
-
-        thread = threading.Thread(target=self.run, args=())
-        thread.daemon = True                            # Daemonize thread
-        thread.start()                                  # Start the execution
-
-    def run(self):
-        sleep(4)
-        while True:
-            data, addr = self.client.recvfrom(1024)
-            data = data.decode('ascii')
-            sms_portal = "sms_portal: "
-            if data.startswith(sms_portal):
-                d = json.loads(data[len(sms_portal):])
-                global sms_portal_ip
-                global sms_portal_port
-                sms_portal_ip = d["ip"]
-                sms_portal_port = d["port"]
-                dictToSend = {'commands':my_commands, 'port':my_port, 'ip':my_ip}
-                try:
-                    res = requests.get("http://%s:%d/register_service" % (sms_portal_ip, sms_portal_port), json=dictToSend, timeout=2)
-                except requests.ConnectionError as e:
-                    print("failed to send %s" % e)
 
 def scan_collection():
+    music_collection = []
     mypath = "/home/rolf/sfx"
     urls = [os.path.join(mypath, f) for f in listdir(mypath) if isfile(join(mypath, f)) and f.endswith(".mp3")]
     for url in urls:
         audiofile = eyed3.load(url)
         if audiofile.tag:
+            print("found : %s - %s (%s)" % ( audiofile.tag.artist, audiofile.tag.title, url))
             music_collection.append({"title":audiofile.tag.title, "artist":audiofile.tag.artist, "url":"file://"+url})
+    return music_collection
 
 
-scan_collection()
+music_collection = scan_collection()
 
 
-#http://127.0.0.1:5002/play?query=hello
-@app.route("/play")
-def hello():
-    query = request.args.get('query')
+#http://127.0.0.1:5002/play?query=sanitarium
+def play(params):
+    print("play: '%s'" % params[b"query"][0].decode('ascii'))
+    query = params[b"query"][0].decode('ascii')
     best_match = {}
     best_score = -1.0
     for music in music_collection:
@@ -154,15 +109,23 @@ def hello():
         if not title:
             continue
         score = fuzzy_substring(query.lower(), title.lower())
+        print("score = %s (%s)" % (score, title))
         if score < best_score or best_score == -1.0:
             best_score = score
             best_match = music
-    subprocess.call("qdbus org.mpris.MediaPlayer2.vlc /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri \"%s\"" % best_match["url"], shell=True, stdout=devnull)
-    print("playing: '" + best_match["artist"] + " - " + best_match["title"] + "' (" + best_match["url"] + ")")
-    return "playing: '" + best_match["artist"] + " - " + best_match["title"] + "'"
+    if "artist" in best_match:
+        print("artist: '%s'" % best_match["artist"])
+    if "title" in best_match:
+        print("title: '%s'" % best_match["title"])
+    if "url" in best_match:
+        print("url: '%s'" % best_match["url"])
+        subprocess.call("qdbus org.mpris.MediaPlayer2.vlc /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri \"%s\"" % best_match["url"], shell=True, stdout=devnull)
+        return "playing: '" + best_match["artist"] + " - " + best_match["title"] + "'"
+    return "no url!"
 
 
 if __name__ == '__main__':
     vlc_thread = VlcThread()
-    broadcastListener = BroadcastListener();
-    app.run(host="0.0.0.0", port=my_port, threaded=True)
+    comm = Comm("music_server", {"play": play})
+    while True:
+        time.sleep(2.0)

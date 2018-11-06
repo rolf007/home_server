@@ -8,6 +8,8 @@ import subprocess
 import time
 import os
 import re
+sys.path.append("../comm")
+from comm import Comm
 
 devnull = open(os.devnull, 'w')
 #seq0 = KeyPress.compile("Aa1000-3000*Aa<foo>", foo=lambda: print("SUCCES foo"))
@@ -36,6 +38,7 @@ class RaspberryInputter:
     def main_loop(self):
         while(True):
             time.sleep(1)
+            print("...")
 
 class PyGameInputter:
     def __init__(self):
@@ -59,9 +62,9 @@ class PyGameInputter:
                     self.key_input(c, True)
                 if event.type == pygame.KEYUP:
                     if event.key == pygame.K_q:
-                        if self.timer: self.timer.cancel()
-                        if self.relax_timer: self.relax_timer.cancel()
-                        return
+#                        if self.timer: self.timer.cancel()
+#                        if self.relax_timer: self.relax_timer.cancel()
+#                        return
                         sys.exit(0)
                     if event.key == pygame.K_a:
                         c = 'a'
@@ -204,6 +207,7 @@ class ItTest(KeyPressRunner, PyGameInputter):
 class RaspberryRadio(KeyPressRunner, PyGameInputter):
     def __init__(self):
         super(RaspberryRadio, self).__init__()
+        self.comm = Comm("player", {})
         self.main_menu = KeyPress.mkUnion([
             KeyPress.compile(".A.a<match>", match=lambda: self.youtube_play()),
             KeyPress.compile(".B.b<match>", match=lambda: self.radio_play()),
@@ -251,8 +255,9 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
         if query:
             print("requesting '%s'" % query)
             try:
-                res = requests.get('http://127.0.0.1:5002/play?query=%s' % query, timeout=2)
-                print("res = %s" % res.content)
+                res = self.comm.call("music_server", "play", {"query": [query]})
+                #res = requests.get('http://127.0.0.1:5002/play?query=%s' % query, timeout=2)
+                print("res = %s" % res)
             except requests.ConnectionError as e:
                 print("failed to send %s" % e)
         self.set_source("multicast")
@@ -264,6 +269,7 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
         self.set_source(None)
 
     def set_source(self, source):
+        print("setting source: '%s'" % source)
         if source == "radio":
             self.multicast_receiver.stop()
             self.youtube.stop()
@@ -299,7 +305,8 @@ class MulticastReceiver(object):
 class Radio(object):
     def __init__(self):
         self.channels = {
-                0: 'http://streaming.radio24syv.dk/pls/24syv_96_IR.pls',
+                #0: 'http://streaming.radio24syv.dk/pls/24syv_96_IR.pls',
+                0: 'http://stream.taleradio.dk/web128',
                 1: 'http://live-icy.gss.dr.dk/A/A03L.mp3.m3u',
                 2: 'http://live-icy.gss.dr.dk/A/A04L.mp3.m3u',
                 3: 'http://live-icy.gss.dr.dk/A/A05L.mp3.m3u',
@@ -321,7 +328,7 @@ class Radio(object):
             self.stop()
         #self.p = subprocess.Popen("vlc --intf dummy %s" % self.channels[self.channel], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         subprocess.check_output("printenv > bad" , shell=True)
-        self.p = subprocess.Popen("cvlc %s" % self.channels[self.channel], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.p = subprocess.Popen("vlc --intf dummy %s" % self.channels[self.channel], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 #https://www.radio24syv.dk/hoer-radio-paa-din-computer
 #24syv vlc http://streaming.radio24syv.dk/pls/24syv_96_IR.pls
 #https://www.dr.dk/hjaelp/digtal-radio/direkte-links-til-dr-radio-paa-nettet
