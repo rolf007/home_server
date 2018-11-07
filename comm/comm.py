@@ -1,39 +1,25 @@
 import json
 import random
-from socket import socket, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR, timeout, inet_aton, SOCK_DGRAM, IPPROTO_UDP, INADDR_ANY, IPPROTO_IP, IP_ADD_MEMBERSHIP, IP_MULTICAST_TTL
+import socket
 import struct
 import threading
 import time
-import uuid
 import urllib
-
-def get_ip():
-    s = socket(AF_INET, SOCK_DGRAM)
-    try:
-        # doesn't even have to be reachable
-        s.connect(('10.255.255.255', 1))
-        IP = s.getsockname()[0]
-    except:
-        IP = '127.0.0.1'
-    finally:
-        s.close()
-    return IP
 
 class UnicastListener():
     def __init__(self, cb, port):
         self.cb = cb
-        self.serverSocket = socket(AF_INET, SOCK_STREAM)
-        self.serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+        self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         #Prepare a sever socket
         self.serverSocket.bind(('', port))
         self.serverSocket.listen(1)
         self.serverSocket.settimeout(2.0)
-        self.i = 7
         self.running = True
 
         self.thread = threading.Thread(target=self.run, args=())
-#        self.thread.daemon = True                            # Daemonize thread
-        self.thread.start()                                  # Start the execution
+        #self.thread.daemon = True
+        self.thread.start()
 
     def run(self):
         while self.running:
@@ -50,13 +36,9 @@ class UnicastListener():
                 #Send one HTTP header line into socket
                 connectionSocket.send(bytes('HTTP/1.0 200 OK\r\n\r\n%s'%ret, 'ascii'))
                 #connectionSocket.send('404 Not Found')
-                #Send the content of the requested file to the client
-                self.i = self.i + 1
                 connectionSocket.close()
-            except timeout:
+            except socket.timeout:
                 pass
-                #Close client socket
-                #connectionSocket.close()
         print("closing serverSocket")
         self.serverSocket.close()
 
@@ -69,7 +51,7 @@ class UnicastSender():
         pass
 
     def send(self, ip, port, function, args):
-        s = socket(AF_INET, SOCK_STREAM)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         try:
             s.connect((ip, port))
@@ -93,25 +75,25 @@ class MulticastListener():
     def __init__(self, cb):
         self.cb = cb
         self.running = True
-        MCAST_GRP = '224.1.1.1'
-        MCAST_PORT = 5007
-        IS_ALL_GROUPS = True
+        mcast_grp = '224.1.1.1'
+        mcast_port = 5007
+        is_all_groups = True
 
-        self.sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
-        self.sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.settimeout(2.0)
-        if IS_ALL_GROUPS:
+        if is_all_groups:
             # on this port, receives ALL multicast groups
-            self.sock.bind(('', MCAST_PORT))
+            self.sock.bind(('', mcast_port))
         else:
-            # on this port, listen ONLY to MCAST_GRP
-            self.sock.bind((MCAST_GRP, MCAST_PORT))
-        mreq = struct.pack("4sl", inet_aton(MCAST_GRP), INADDR_ANY)
+            # on this port, listen ONLY to mcast_grp
+            self.sock.bind((mcast_grp, mcast_port))
+        mreq = struct.pack("4sl", socket.inet_aton(mcast_grp), socket.INADDR_ANY)
 
-        self.sock.setsockopt(IPPROTO_IP, IP_ADD_MEMBERSHIP, mreq)
+        self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
         self.thread = threading.Thread(target=self.runme, args=())
-        #self.thread.daemon = True                            # Daemonize thread
-        self.thread.start()                                  # Start the execution
+        #self.thread.daemon = True
+        self.thread.start()
 
     def runme(self):
         while self.running:
@@ -119,7 +101,7 @@ class MulticastListener():
                 r = self.sock.recv(10240)
                 self.cb(json.loads(r))
                 time.sleep(1)
-            except timeout:
+            except socket.timeout:
                 pass
         print("closing multicast socket")
         self.sock.close()
@@ -129,56 +111,70 @@ class MulticastListener():
         self.thread.join()
 
 class MulticastSender():
-    def __init__(self, my_uuid, service_name, functions):
-        self.uuid = my_uuid
+    def __init__(self, service_name, functions):
         self.service_name = service_name
         self.functions = functions
         start_sleep = random.randint(500,1000)/1000.0
         self.timer = threading.Timer(start_sleep, self.send_whos_there)
         self.timer.start()
-        self.ip = get_ip()
 
     def send_whos_there(self):
-        whos_there = json.dumps({"cmd": "whos_there", "uuid": str(self.uuid)})
-        self.multicast(whos_there)
+        msg = json.dumps({"cmd": "whos_there"})
+        self.multicast(msg)
 
-    def send_im_here(self, port):
-        whos_there = json.dumps({"cmd": "im_here", "uuid": str(self.uuid), "port": port, "service": self.service_name, "functions": self.functions, "ip": self.ip})
-        self.multicast(whos_there)
+    def send_im_here(self, ip, port):
+        msg = json.dumps({"cmd": "im_here", "port": port, "service": self.service_name, "functions": self.functions, "ip": ip})
+        self.multicast(msg)
 
     def multicast(self, msg):
         print("multicasting %s" % msg)
-        MCAST_GRP = '224.1.1.1'
-        MCAST_PORT = 5007
+        mcast_grp = '224.1.1.1'
+        mcast_port = 5007
         # regarding socket.IP_MULTICAST_TTL
         # ---------------------------------
         # for all packets sent, after two hops on the network the packet will not
         # be re-sent/broadcast (see https://www.tldp.org/HOWTO/Multicast-HOWTO-6.html)
-        MULTICAST_TTL = 2
+        multicast_ttl = 2
 
-        sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
-        sock.setsockopt(IPPROTO_IP, IP_MULTICAST_TTL, MULTICAST_TTL)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, multicast_ttl)
         bb = bytes(str(msg), 'ascii')
-        sock.sendto(bb, (MCAST_GRP, MCAST_PORT))
+        sock.sendto(bb, (mcast_grp, mcast_port))
+
+    def shut_down(self):
+        self.timer.cancel()
 
 
 class Comm():
-    def __init__(self, service_name, functions):
+    def __init__(self, port, service_name, functions):
+        self.ip = self.get_ip()
+        self.port = port
+        self.service = service_name
         self.functions = functions
-        self.port = None
         self.others = {}
-        self.uuid = uuid.uuid4()
         self.multicast_listener = MulticastListener(lambda data: self.mc_received(data))
-        self.multicast_sender = MulticastSender(self.uuid, service_name, list(functions.keys()))
-        self.unicast_listener = None
+        self.multicast_sender = MulticastSender(service_name, list(functions.keys()))
+        self.unicast_listener = UnicastListener(lambda data: self.uc_received(data), self.port)
         self.unicast_sender = UnicastSender()
         start_sleep = random.randint(3000,3500)/1000.0
-        self.timer = threading.Timer(start_sleep, self.configure_unicast)
+        self.timer = threading.Timer(start_sleep, self.send_im_here)
         self.timer.start()
+
+    def get_ip(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            # doesn't even have to be reachable
+            s.connect(('10.255.255.255', 1))
+            ip = s.getsockname()[0]
+        except:
+            ip = '127.0.0.1'
+        finally:
+            s.close()
+        return ip
 
     def uc_received(self, data):
         print("uc_received '%s'" % data)
-        query = urllib.parse.urlsplit(data).query
+        query = urllib.parse.urlsplit(data).query.decode('ascii')
         func  = urllib.parse.urlsplit(data).path.decode('ascii')
         params = urllib.parse.parse_qs(query)
         if func in self.functions:
@@ -186,21 +182,19 @@ class Comm():
         return None
 
     def mc_received(self, data):
-        recv_uuid = uuid.UUID(data["uuid"])
-        if recv_uuid == self.uuid:
+        if ("port" in data) and data["port"] == self.port and ("ip" in data) and data["ip"] == self.ip:
+            #mc message from my self
             return
-        print("%s received %s" % (self.uuid, data))
+        print("%s:%s received %s" % (self.ip, self.port, data))
         if data["cmd"] == "whos_there":
-            if self.port:
-                self.multicast_sender.send_im_here(self.port)
+            self.multicast_sender.send_im_here(self.ip, self.port)
         if data["cmd"] == "im_here":
-            self.others[recv_uuid] = {"port": data["port"], "service": data["service"], "functions": data["functions"], "ip": data["ip"]}
+            if data["port"] == str(self.port):
+                print("WARNING, identical ports: %s:%s (%s) and %s:%s (%s)" % ("me", self.port, self.service, data["ip"], data["port"], data["service"]))
+            self.others[(data["ip"], data["port"])] = {"port": data["port"], "service": data["service"], "functions": data["functions"], "ip": data["ip"]}
 
-
-    def configure_unicast(self):
-        self.port = random.randint(5000,5999)
-        self.unicast_listener = UnicastListener(lambda data: self.uc_received(data), self.port)
-        self.multicast_sender.send_im_here(self.port)
+    def send_im_here(self):
+        self.multicast_sender.send_im_here(self.ip, self.port)
 
     def call(self, service, function, args):
         for other in self.others:
@@ -212,4 +206,6 @@ class Comm():
         if self.port:
             self.unicast_listener.stop()
         self.multicast_listener.stop()
+        self.multicast_sender.shut_down()
+        self.timer.cancel()
 

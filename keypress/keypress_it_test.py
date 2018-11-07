@@ -8,7 +8,7 @@ import subprocess
 import time
 import os
 import re
-sys.path.append("../comm")
+sys.path.append(sys.path[0]+"/../comm")
 from comm import Comm
 
 devnull = open(os.devnull, 'w')
@@ -43,14 +43,15 @@ class RaspberryInputter:
 class PyGameInputter:
     def __init__(self):
         super(PyGameInputter, self).__init__()
+        self.running = True
         pygame.display.init()
         pygame.display.set_mode((100,100))
 
     def main_loop(self):
-        while True:
+        while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    pygame.quit(); #sys.exit() if sys is imported
+                    self.running = False
                 c = None
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_a:
@@ -62,10 +63,7 @@ class PyGameInputter:
                     self.key_input(c, True)
                 if event.type == pygame.KEYUP:
                     if event.key == pygame.K_q:
-#                        if self.timer: self.timer.cancel()
-#                        if self.relax_timer: self.relax_timer.cancel()
-#                        return
-                        sys.exit(0)
+                        self.running = False
                     if event.key == pygame.K_a:
                         c = 'a'
                     if event.key == pygame.K_b:
@@ -73,6 +71,13 @@ class PyGameInputter:
                     if event.key == pygame.K_c:
                         c = 'c'
                     self.key_input(c, False)
+        self.shut_down()
+
+    def shut_down(self):
+        if self.timer: self.timer.cancel()
+        if self.relax_timer: self.relax_timer.cancel()
+        pygame.display.quit()
+        pygame.quit(); #sys.exit() if sys is imported
 
 class BInputter:
     def __init__(self):
@@ -207,7 +212,7 @@ class ItTest(KeyPressRunner, PyGameInputter):
 class RaspberryRadio(KeyPressRunner, PyGameInputter):
     def __init__(self):
         super(RaspberryRadio, self).__init__()
-        self.comm = Comm("player", {})
+        self.comm = Comm(5000, "player", {})
         self.main_menu = KeyPress.mkUnion([
             KeyPress.compile(".A.a<match>", match=lambda: self.youtube_play()),
             KeyPress.compile(".B.b<match>", match=lambda: self.radio_play()),
@@ -267,6 +272,7 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
 
     def shut_down(self):
         self.set_source(None)
+        self.comm.shut_down()
 
     def set_source(self, source):
         print("setting source: '%s'" % source)
@@ -326,8 +332,6 @@ class Radio(object):
         print("playing radio...")
         if self.p:
             self.stop()
-        #self.p = subprocess.Popen("vlc --intf dummy %s" % self.channels[self.channel], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        subprocess.check_output("printenv > bad" , shell=True)
         self.p = subprocess.Popen("vlc --intf dummy %s" % self.channels[self.channel], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 #https://www.radio24syv.dk/hoer-radio-paa-din-computer
 #24syv vlc http://streaming.radio24syv.dk/pls/24syv_96_IR.pls
@@ -384,5 +388,8 @@ class Youtube:
         self.p = None
 
 it_test = RaspberryRadio()
-it_test.main_loop()
+try:
+    it_test.main_loop()
+except KeyboardInterrupt:
+    pass
 it_test.shut_down()

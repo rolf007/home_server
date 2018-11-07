@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #https://wiki.videolan.org/Documentation:Streaming_HowTo/Advanced_Streaming_Using_the_Command_Line/#Examples
 #import unicodedata
@@ -9,7 +9,6 @@
 import subprocess
 import os
 import sys
-import json
 import eyed3
 
 from time import strftime, localtime, sleep
@@ -21,22 +20,14 @@ from os.path import isfile, join
 
 import threading
 
-sys.path.append("../comm")
+sys.path.append(sys.path[0]+"/../comm")
 from comm import Comm
 
 import logging
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
-#my_ip = server_shared.get_ip()
-
 devnull = open(os.devnull, 'w')
-
-music_collection = [
-    {"artist":"metallica", "title":"orion"},
-    {"artist":"metallica", "title":"for whom the bells toll"},
-    {"artist":"acdc",      "title":"for those about to rock"},
-    ]
 
 def fuzzy_substring(needle, haystack):
     """Calculates the fuzzy match of needle in haystack,
@@ -67,21 +58,17 @@ def fuzzy_substring(needle, haystack):
     return min(row1)
 
 
-class VlcThread(object):
+class VlcThread():
     def __init__(self):
+        self.p = subprocess.Popen("vlc --intf dummy --sout '#transcode{acodec=mpga,ab=128}:rtp{mux=ts,dst=239.255.12.42,sdp=sap,name=\"TestStream\"}'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        thread = threading.Thread(target=self.run, args=())
-        thread.daemon = True                            # Daemonize thread
-        thread.start()                                  # Start the execution
-
-    def run(self):
-        subprocess.call("vlc -vvv  --intf dummy --sout '#transcode{acodec=mpga,ab=128}:rtp{mux=ts,dst=239.255.12.42,sdp=sap,name=\"TestStream\"}'", shell=True, stdout=devnull, stderr=devnull)
-        print("VLC unexpectedly exited")
-        #playback:
-        #vlc rtp://239.255.12.42
-        #play:
-        #qdbus org.mpris.MediaPlayer2.vlc /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri file:///home/rolf/Downloads/droid3_newfirmware.mp3
-
+    def stop(self):
+        if self.p == None:
+            return
+        print("stopping serving music...")
+        self.p.terminate()
+        print(self.p.communicate())
+        self.p = None
 
 def scan_collection():
     music_collection = []
@@ -100,8 +87,8 @@ music_collection = scan_collection()
 
 #http://127.0.0.1:5002/play?query=sanitarium
 def play(params):
-    print("play: '%s'" % params[b"query"][0].decode('ascii'))
-    query = params[b"query"][0].decode('ascii')
+    print("play: '%s'" % params["query"][0])
+    query = params["query"][0]
     best_match = {}
     best_score = -1.0
     for music in music_collection:
@@ -126,6 +113,13 @@ def play(params):
 
 if __name__ == '__main__':
     vlc_thread = VlcThread()
-    comm = Comm("music_server", {"play": play})
-    while True:
-        time.sleep(2.0)
+    comm = Comm(5001, "music_server", {"play": play})
+    try:
+        while True:
+            time.sleep(2.0)
+    except KeyboardInterrupt:
+        pass
+    print("music_server shutting down!")
+    vlc_thread.stop()
+    comm.shut_down()
+    print("music_server shutted down!")
