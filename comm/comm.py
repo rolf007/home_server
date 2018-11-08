@@ -27,14 +27,20 @@ class UnicastListener():
                 #Establish the connection
                 connectionSocket, addr = self.serverSocket.accept()
                 message = connectionSocket.recv(1024)
-                ret = ""
+                ret = (404, "Not found")
                 a = message.find(b'/')
                 if a != -1:
                     b = message.find(b' ', a)
                     if b != -1:
                         ret = self.cb(message[a+1:b])
                 #Send one HTTP header line into socket
-                connectionSocket.send(bytes('HTTP/1.0 200 OK\r\n\r\n%s'%ret, 'ascii'))
+                if ret[0] == 200:
+                    errorMsg = "OK"
+                elif ret[0] == 404:
+                    errorMsg = "Not Found"
+                else:
+                    errorMsg = "Other error"
+                connectionSocket.send(bytes('HTTP/1.0 %d %s\r\n\r\n%s' % (ret[0], errorMsg, ret[1]), 'ascii'))
                 #connectionSocket.send('404 Not Found')
                 connectionSocket.close()
             except socket.timeout:
@@ -179,7 +185,7 @@ class Comm():
         params = urllib.parse.parse_qs(query)
         if func in self.functions:
             return self.functions[func](params)
-        return None
+        return (404, "Unknown function '%s'" % func)
 
     def mc_received(self, data):
         if ("port" in data) and data["port"] == self.port and ("ip" in data) and data["ip"] == self.ip:
@@ -190,7 +196,7 @@ class Comm():
             self.multicast_sender.send_im_here(self.ip, self.port)
         if data["cmd"] == "im_here":
             if data["port"] == str(self.port):
-                print("WARNING, identical ports: %s:%s (%s) and %s:%s (%s)" % ("me", self.port, self.service, data["ip"], data["port"], data["service"]))
+                print("WARNING, identical ports: %s:%s (%s) and %s:%s (%s)" % (self.ip, self.port, self.service, data["ip"], data["port"], data["service"]))
             self.others[(data["ip"], data["port"])] = {"port": data["port"], "service": data["service"], "functions": data["functions"], "ip": data["ip"]}
 
     def send_im_here(self):

@@ -7,8 +7,9 @@ import requests
 import subprocess
 import time
 import os
-import re
-sys.path.append(sys.path[0]+"/../comm")
+
+home_server_root = os.path.split(sys.path[0])[0]
+sys.path.append(os.path.join(home_server_root, "comm"))
 from comm import Comm
 
 devnull = open(os.devnull, 'w')
@@ -214,7 +215,7 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
         super(RaspberryRadio, self).__init__()
         self.comm = Comm(5000, "player", {})
         self.main_menu = KeyPress.mkUnion([
-            KeyPress.compile(".A.a<match>", match=lambda: self.youtube_play()),
+            KeyPress.compile(".A.a<match>", match=lambda: self.youtube_play("metallica judas kiss")),
             KeyPress.compile(".B.b<match>", match=lambda: self.radio_play()),
             KeyPress.compile(".B.A.a.b<match>", match=lambda: self.radio_channel(0)),
             KeyPress.compile(".B.C.c.b<match>", match=lambda: self.radio_channel(1)),
@@ -261,13 +262,19 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
             print("requesting '%s'" % query)
             try:
                 res = self.comm.call("music_server", "play", {"query": [query]})
-                #res = requests.get('http://127.0.0.1:5002/play?query=%s' % query, timeout=2)
                 print("res = %s" % res)
             except requests.ConnectionError as e:
                 print("failed to send %s" % e)
         self.set_source("multicast")
 
-    def youtube_play(self):
+    def youtube_play(self, query):
+        if query:
+            print("requesting '%s'" % query)
+            try:
+                res = self.comm.call("music_server", "play", {"query": [query], "source": "youtube"})
+                print("res = %s" % res)
+            except requests.ConnectionError as e:
+                print("failed to send %s" % e)
         self.set_source("youtube")
 
     def shut_down(self):
@@ -308,6 +315,25 @@ class MulticastReceiver(object):
         self.p.terminate()
         self.p = None
 
+class Youtube:
+    def __init__(self):
+        self.p = None
+
+    def start(self):
+        print("playing youtube...")
+        if self.p:
+            self.stop()
+        self.p = subprocess.Popen("vlc --intf dummy rtp://239.255.12.42", shell=True, stdout=devnull, stderr=devnull)
+
+    def stop(self):
+        if self.p == None:
+            return
+        print("stopping youtube...")
+        self.p.terminate()
+        print(self.p.communicate())
+        self.p = None
+
+
 class Radio(object):
     def __init__(self):
         self.channels = {
@@ -344,45 +370,6 @@ class Radio(object):
         if self.p == None:
             return
         print("stopping radio...")
-        self.p.terminate()
-        print(self.p.communicate())
-        self.p = None
-
-class Youtube:
-    def __init__(self):
-        self.p = None
-
-    def start(self):
-        print("playing youtube...")
-        search = "metallica+hit+the+lights"
-        if self.p:
-            self.stop()
-
-        p = subprocess.Popen("wget \"https://www.youtube.com/results?search_query=%s\" -O -" % search, shell=True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-        stdout, stderr = p.communicate()
-        #print("stdout = '%s'" % stdout)
-        print("stderr = '%s'" % stderr)
-        m = re.search('href="/watch\?v=([^"]*)"', stdout.decode('ascii', errors="ignore"))
-        #cvlc https://www.youtube.com/watch?v=863fYC-Mb_QI
-        # /etc/portage/package.use/vlc :
-        #media-video/vlc live lua matroska theora upnp
-        # https://github.com/rg3/youtube-dl
-        # python -m youtube_dl -x --audio-format mp3 gsoNl0MzDFA -o '%(artist)s - %(title)s.%(ext)s'
-        # python -m youtube_dl ytsearch:"metallica jump in the fire" -o 'foo2'
-
-        
-        if m:
-            print('First number found = {}'.format(m.group()))
-            print('First number found = {}'.format(m[1]))
-            print("cvlc https://www.youtube.com/watch?v=%s" % m[1])
-            self.p = subprocess.Popen("cvlc --intf dummy https://www.youtube.com/watch?v=%s" % m[1], shell=True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-        else:
-            print('Not Found')
-
-    def stop(self):
-        if self.p == None:
-            return
-        print("stopping youtube...")
         self.p.terminate()
         print(self.p.communicate())
         self.p = None
