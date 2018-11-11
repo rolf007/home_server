@@ -2,6 +2,7 @@
 import pygame
 import sys
 from keypress import KeyPress
+from morse_maker import MorseMaker
 from threading import Timer
 import requests
 import subprocess
@@ -25,6 +26,7 @@ class RaspberryInputter:
     def __init__(self):
         super(RaspberryInputter, self).__init__()
         from gpiozero import LED, Button
+        self.running = True
         button2 = Button(2)
         button3 = Button(3)
         button4 = Button(4)
@@ -37,9 +39,11 @@ class RaspberryInputter:
         button4.when_released = lambda: self.key_input('c', False)
 
     def main_loop(self):
-        while(True):
+        while self.running:
             time.sleep(1)
-            print("...")
+
+    def shut_down(self):
+        pass
 
 class PyGameInputter:
     def __init__(self):
@@ -72,9 +76,9 @@ class PyGameInputter:
                     if event.key == pygame.K_c:
                         c = 'c'
                     self.key_input(c, False)
-        self.shut_down()
 
     def shut_down(self):
+        print("==========PyGameInputter shut_down")
         if self.timer: self.timer.cancel()
         if self.relax_timer: self.relax_timer.cancel()
         pygame.display.quit()
@@ -90,52 +94,8 @@ class BInputter:
         while True:
             time.sleep(1)
 
-class MorseMaker:
-    def __init__(self, down, up, t0, t1):
-        self.down = down
-        self.up = up
-        self.t0 = t0
-        self.t1 = t1
-
-    def mkMorse(self, seq, l):
-        s = ""
-        i = "."
-        for c in seq:
-            if c == '.': s += i+self.down+"0-"+str(self.t0)   +"+"+self.up
-            if c == '-': s += i+self.down+str(self.t0)+"-1000"+"+"+self.up
-            i = "0-500"
-        s += str(self.t1)+"-2000<match>"
-        return KeyPress.compile(s, match=l)
-
-    def mkAll(self, l):
-        return [
-            self.mkMorse(".-",   lambda: l("a")),
-            self.mkMorse("-...", lambda: l("b")),
-            self.mkMorse("-.-.", lambda: l("c")),
-            self.mkMorse("-..",  lambda: l("d")),
-            self.mkMorse(".",    lambda: l("e")),
-            self.mkMorse("..-.", lambda: l("f")),
-            self.mkMorse("--.",  lambda: l("g")),
-            self.mkMorse("....", lambda: l("h")),
-            self.mkMorse("..",   lambda: l("i")),
-            self.mkMorse(".---", lambda: l("j")),
-            self.mkMorse("-.-",  lambda: l("k")),
-            self.mkMorse(".-..", lambda: l("l")),
-            self.mkMorse("--",   lambda: l("m")),
-            self.mkMorse("-.",   lambda: l("n")),
-            self.mkMorse("---",  lambda: l("o")),
-            self.mkMorse(".--.", lambda: l("p")),
-            self.mkMorse("--.-", lambda: l("q")),
-            self.mkMorse(".-.",  lambda: l("r")),
-            self.mkMorse("...",  lambda: l("s")),
-            self.mkMorse("-",    lambda: l("t")),
-            self.mkMorse("..-",  lambda: l("u")),
-            self.mkMorse("...-", lambda: l("v")),
-            self.mkMorse(".--",  lambda: l("w")),
-            self.mkMorse("-..-", lambda: l("x")),
-            self.mkMorse("-.--", lambda: l("y")),
-            self.mkMorse("--..", lambda: l("z")),
-        ]
+    def shut_down(self):
+        print("BInputter shut_down")
 
 
 class KeyPressRunner:
@@ -182,6 +142,7 @@ class KeyPressRunner:
                     self.relax_timer.start()
 
 
+
 class ItTest(KeyPressRunner, PyGameInputter):
     def __init__(self):
         super(ItTest, self).__init__()
@@ -207,6 +168,8 @@ class ItTest(KeyPressRunner, PyGameInputter):
         self.key_press = KeyPress(self.main_menu)
 
     def shut_down(self):
+        print("ItTest::shut_down")
+        super(ItTest, self).shut_down()
         pass
 
 
@@ -230,7 +193,6 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
                 )
         self.radio = Radio()
         self.multicast_receiver = MulticastReceiver()
-        self.youtube = Youtube()
         self.go_to_main_menu()
 
     def go_to_main_menu(self):
@@ -285,20 +247,16 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
         print("setting source: '%s'" % source)
         if source == "radio":
             self.multicast_receiver.stop()
-            self.youtube.stop()
             self.radio.start()
         elif source == "multicast":
             self.radio.stop()
-            self.youtube.stop()
             self.multicast_receiver.start()
         elif source == "youtube":
             self.radio.stop()
-            self.multicast_receiver.stop()
-            self.youtube.start()
+            self.multicast_receiver.start()
         else:
             self.radio.stop()
             self.multicast_receiver.stop()
-            self.youtube.stop()
 
 class MulticastReceiver(object):
     def __init__(self):
@@ -312,23 +270,6 @@ class MulticastReceiver(object):
     def stop(self):
         if self.p == None:
             return
-        self.p.terminate()
-        self.p = None
-
-class Youtube:
-    def __init__(self):
-        self.p = None
-
-    def start(self):
-        print("playing youtube...")
-        if self.p:
-            self.stop()
-        self.p = subprocess.Popen("vlc --intf dummy rtp://239.255.12.42", shell=True, stdout=devnull, stderr=devnull)
-
-    def stop(self):
-        if self.p == None:
-            return
-        print("stopping youtube...")
         self.p.terminate()
         print(self.p.communicate())
         self.p = None
