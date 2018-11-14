@@ -62,20 +62,23 @@ class UnicastSender():
         try:
             s.connect((ip, port))
             s.sendall(bytes("GET /%s?%s HTTP/1.1\r\nHost: %s\r\n\r\n" % (function, urllib.parse.urlencode(args, doseq=True), ip), 'ascii'))
+            ret_code = 500
             ret = "undefined"
-            r = s.recv(4096)
-            a = r.find(b' ')
+            r = s.recv(4096).decode('ascii', 'ignore')
+            print("r = '%s'" % r)
+            a = r.find(' ')
             if a != -1:
-                b = r.find(b' ', a+1)
+                b = r.find(' ', a+1)
                 if b != -1:
-                    if r[a+1:b] == b"200":
-                        c = r.find(b'\r\n\r\n', b)
-                        if c != -1:
-                            ret = r[c+4:]
+                    ret_code = int(r[a+1:b])
+                    c = r.find('\r\n\r\n', b)
+                    if c != -1:
+                        ret = r[c+4:]
             s.close()
-            return ret
+            return (ret_code, ret)
         except ConnectionRefusedError:
             print("Can't send. Connection refused!")
+            return (521, "Connection refused!")
 
 class MulticastListener():
     def __init__(self, cb):
@@ -206,7 +209,7 @@ class Comm():
         for other in self.others:
             if self.others[other]["service"] == service:
                 return self.unicast_sender.send(self.others[other]["ip"], self.others[other]["port"], function, args)
-        return "not ready"
+        return (503, "Serive '%s' not available." % service)
 
     def shut_down(self):
         if self.port:

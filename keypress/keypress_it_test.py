@@ -30,7 +30,7 @@ class RaspberryInputter:
         button2 = Button(2)
         button3 = Button(3)
         button4 = Button(4)
-        
+
         button2.when_pressed = lambda: self.key_input('A', True)
         button2.when_released = lambda: self.key_input('a', False)
         button3.when_pressed = lambda: self.key_input('B', True)
@@ -65,6 +65,8 @@ class PyGameInputter:
                         c = 'B'
                     if event.key == pygame.K_c:
                         c = 'C'
+                    if event.key == pygame.K_d:
+                        c = 'D'
                     self.key_input(c, True)
                 if event.type == pygame.KEYUP:
                     if event.key == pygame.K_q:
@@ -75,6 +77,8 @@ class PyGameInputter:
                         c = 'b'
                     if event.key == pygame.K_c:
                         c = 'c'
+                    if event.key == pygame.K_d:
+                        c = 'd'
                     self.key_input(c, False)
 
     def shut_down(self):
@@ -150,8 +154,8 @@ class ItTest(KeyPressRunner, PyGameInputter):
         self.morseAlphbeth = KeyPress.mkUnion(morse_maker.mkAll(lambda c: print("=== %s" % c)) +
                 [KeyPress.compile(".A.a<go_to_normal>", go_to_normal = lambda: self.go_normal())]
                 )
-        
-        
+
+
         self.main_menu = KeyPress.mkUnion([
             KeyPress.compile(".A.C.c.a<go_to_morse>", go_to_morse=lambda: self.go_morse()),
             KeyPress.compile(".A.a<A>", A=lambda: print("A")),
@@ -162,7 +166,7 @@ class ItTest(KeyPressRunner, PyGameInputter):
     def go_morse(self):
         print("going morse")
         self.key_press = KeyPress(self.morseAlphbeth)
-    
+
     def go_normal(self):
         print("going normal")
         self.key_press = KeyPress(self.main_menu)
@@ -180,6 +184,11 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
         self.main_menu = KeyPress.mkUnion([
             KeyPress.compile(".A.a<match>", match=lambda: self.youtube_play("metallica judas kiss")),
             KeyPress.compile(".B.b<match>", match=lambda: self.radio_play()),
+            KeyPress.compile(".D.d<match>", match=lambda: self.podcast("d6m")),
+            KeyPress.compile(".D.A.a.d<match>", match=lambda: self.podcast("baelte")),
+            KeyPress.compile(".D.A.a.A.a.d<match>", match=lambda: self.podcast("orientering")),
+            KeyPress.compile(".D.C.c.d<match>", match=lambda: self.podcast_next()),
+            KeyPress.compile(".D.B.b.d<match>", match=lambda: self.podcast_prev()),
             KeyPress.compile(".B.A.a.b<match>", match=lambda: self.radio_channel(0)),
             KeyPress.compile(".B.C.c.b<match>", match=lambda: self.radio_channel(1)),
             KeyPress.compile(".C.c<match>", match=lambda: self.multicast_play(None)),
@@ -191,6 +200,11 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
         self.morse_menu = KeyPress.mkUnion(morse_maker.mkAll(lambda c: self.morse_append(c)) +
                 [KeyPress.compile(".A.a<match>", match = lambda: self.end_morse())]
                 )
+        print("==== press 'A' for youtube")
+        print("==== press 'B' for radio")
+        print("==== press 'CA' for music collection")
+        print("==== press 'CAAA' for morse")
+        print("==== press 'D' for podcast (DC=next, DB = prev)")
         self.radio = Radio()
         self.multicast_receiver = MulticastReceiver()
         self.go_to_main_menu()
@@ -219,12 +233,38 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
     def radio_play(self):
         self.set_source("radio")
 
+    def podcast(self, program):
+        if program:
+            print("requesting program '%s'" % program)
+            try:
+                res = self.comm.call("music_server", "podcast", {"program": [program]})
+                print("res = %d %s" % res)
+            except requests.ConnectionError as e:
+                print("failed to send %s" % e)
+        self.set_source("podcast")
+
+    def podcast_next(self):
+        try:
+            res = self.comm.call("music_server", "podcast", {"next": [1]})
+            print("res = %d %s" % res)
+        except requests.ConnectionError as e:
+            print("failed to send %s" % e)
+        self.set_source("podcast")
+
+    def podcast_prev(self):
+        try:
+            res = self.comm.call("music_server", "podcast", {"prev": [1]})
+            print("res = %d %s" % res)
+        except requests.ConnectionError as e:
+            print("failed to send %s" % e)
+        self.set_source("podcast")
+
     def multicast_play(self, query):
         if query:
             print("requesting '%s'" % query)
             try:
                 res = self.comm.call("music_server", "play", {"query": [query]})
-                print("res = %s" % res)
+                print("res = %d %s" % res)
             except requests.ConnectionError as e:
                 print("failed to send %s" % e)
         self.set_source("multicast")
@@ -234,7 +274,7 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
             print("requesting '%s'" % query)
             try:
                 res = self.comm.call("music_server", "play", {"query": [query], "source": "youtube"})
-                print("res = %s" % res)
+                print("res = %d %s" % res)
             except requests.ConnectionError as e:
                 print("failed to send %s" % e)
         self.set_source("youtube")
@@ -254,6 +294,9 @@ class RaspberryRadio(KeyPressRunner, PyGameInputter):
         elif source == "youtube":
             self.radio.stop()
             self.multicast_receiver.start()
+        elif source == "podcast":
+            self.radio.stop()
+            self.multicast_receiver.start()
         else:
             self.radio.stop()
             self.multicast_receiver.stop()
@@ -265,13 +308,15 @@ class MulticastReceiver(object):
     def start(self):
         if self.p:
             self.stop()
+        print("starting multicast...")
         self.p = subprocess.Popen("vlc --intf dummy rtp://239.255.12.42", shell=True, stdout=devnull, stderr=devnull)
 
     def stop(self):
         if self.p == None:
             return
+        print("stopping multicast...")
         self.p.terminate()
-        print(self.p.communicate())
+        print("vlc multicast stopped: %s %s" % self.p.communicate())
         self.p = None
 
 
@@ -285,7 +330,6 @@ class Radio(object):
                 3: 'http://live-icy.gss.dr.dk/A/A05L.mp3.m3u',
                 }
         self.channel = 0
-
         self.p = None
 
     def set_channel(self, channel):
@@ -294,9 +338,8 @@ class Radio(object):
             if channel != self.channel:
                 self.channel = channel
 
-
     def start(self):
-        print("playing radio...")
+        print("starting radio...")
         if self.p:
             self.stop()
         self.p = subprocess.Popen("vlc --intf dummy %s" % self.channels[self.channel], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -312,7 +355,7 @@ class Radio(object):
             return
         print("stopping radio...")
         self.p.terminate()
-        print(self.p.communicate())
+        print("vlc radio stopped: %s %s" % self.p.communicate())
         self.p = None
 
 it_test = RaspberryRadio()
