@@ -2,118 +2,104 @@
 
 # suresms.dk
 # http://developer.suresms.com/https/
-# https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=L8wS8C77&to=+4526857540&Text=Test001
+# https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=xxxxxxxx&to=+4526857540&Text=Test001
 #Send Sms
-# curl "https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=L8wS8C77&to=+4526857540&Text=Test002"
+# curl "https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=xxxxxxxx&to=+4526857540&Text=Test002"
 #Receive Sms:
 # curl "http://asmund.dk:5000/somepage?receivedutcdatetime=time&receivedfromphonenumber=from&receivedbyphonenumber=by&body=body"
 
-
-import socket
-
-from time import strftime, localtime, sleep
-
-import time
-
-from flask import Flask, request
-app = Flask(__name__)
-
-import threading
+import argparse
+import json
+import os
 import requests
 import sys
-import argparse
+import time
+import urllib
 
-sys.path.append("../server_shared")
-import server_shared
 
-##res = requests.get("https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=L8wS8C77&to=+4526857540&Text=%s" % "outofmoney", timeout=2)
+home_server_root = os.path.split(sys.path[0])[0]
+sys.path.append(os.path.join(home_server_root, "comm"))
+from comm import Comm
+from comm import UnicastListener
+
+##res = requests.get("https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=xxxxxxxx&to=+4526857540&Text=%s" % "outofmoney", timeout=2)
 ##print("res '%s'" % res)
 ##exit(0)
 
+class SmsPortal():
+    def __init__(self):
+        self.comm = Comm(5003, "sms_portal", {"send": self.send_sms})
+        self.external_port = 5100
+        self.unicast_listener = UnicastListener(self.sms_received, self.external_port)
+        self.sms_password = self.load_obj("sms_password")[0]
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--pay', action='store_true')
+        self.args = parser.parse_args()
+        if self.args.pay:
+            print("you must pay!")
+        else:
+            print("WARNING, you can't send SMS'es")
 
-import logging
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
+# curl "http://asmund.dk:5100/somepage?receivedutcdatetime=time&receivedfromphonenumber=from&receivedbyphonenumber=by&body=body"
+# http://127.0.0.1:5100/somepage?receivedutcdatetime=time&receivedfromphonenumber=from&receivedbyphonenumber=by&body=body%20p=metallica
+    def sms_received(self, data):
+        print("sms_received '%s'" % data)
+        query = urllib.parse.urlsplit(data).query.decode('ascii')
+        func  = urllib.parse.urlsplit(data).path.decode('ascii')
+        if func != "somepage":
+            return (404, "not available")
+        params = urllib.parse.parse_qs(query)
+        receivedutcdatetime = params['receivedutcdatetime'][0]
+        receivedfromphonenumber = params['receivedfromphonenumber'][0]
+        receivedbyphonenumber = params['receivedbyphonenumber'][0]
+        body = params['body'][0]
 
-commands = {}
-my_port = 5000
-my_ip = server_shared.get_ip()
+        space = body.find(' ')
+        if space == -1:
+            cmd = body
+            args = ""
+        else:
+            cmd = body[:space]
+            args = body[space+1:]
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--pay', action='store_true')
-args = parser.parse_args()
-if args.pay:
-    print("you must pay!")
-else:
-    print("WARNING, you can't send SMS'es")
+        print("cmd = '%s'" % cmd)
+        print("args = '%s'" % args)
 
-class Broadcaster(object):
+        return (200, "sms handled ok")
 
-    def __init__(self, interval=1):
+    def load_obj(self, name):
+        with open(home_server_root + "/sms_portal/" + name + '.json', 'rb') as f:
+            return json.load(f)
 
-        self.server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        # Set a timeout so the socket does not block
-        # indefinitely when trying to receive data.
-        self.server.settimeout(0.2)
-        self.server.bind(("", 44444))
+    # http://127.0.0.1:5003/send?text=hemmelig_token&to=+4526857540
+    def send_sms(self, params):
+        if "text" not in params:
+            return (404, "sending sms requires a 'text'")
+        if "to" not in params:
+            return (404, "sending sms requires a 'to'")
+        text = params["text"][0]
+        to = params["to"][0]
+        #to = "+4526857540"
+        #to = "+4540216259"
+        login = "Rolf"
+        pw = self.sms_password
+        if self.args.pay:
+            print("sending sms: '%s' to '%s'" % (text, to))
+            res = requests.get("https://api.suresms.com/Script/SendSMS.aspx?login=%s&password=%s&to=%s&Text=%s" % (login, pw, to, text), timeout=2)
+            print("res '%s'" % res)
+            return (200, "send sms!")
+        else:
+            print("would have sent sms: '%s' to '%s'" % (text, to))
+            return (200, "would have sent sms!")
 
-        self.interval = interval
+    def shut_down(self):
+        self.comm.shut_down()
+        self.unicast_listener.stop()
 
-        thread = threading.Thread(target=self.run, args=())
-        thread.daemon = True                            # Daemonize thread
-        thread.start()                                  # Start the execution
-
-
-    def run(self):
-        while True:
-            message = "sms_portal: {\"port\":%d, \"ip\":\"%s\"}" % ( my_port, my_ip)
-            self.server.sendto(bytes(message, 'ascii'), ('<broadcast>', 37020))
-
-            time.sleep(self.interval)
-
-
-@app.route("/register_service")
-def register_service():
-    payload = request.get_json()
-    if "commands" in payload and "port" in payload and "ip" in payload:
-        for cmd in payload["commands"]:
-            if cmd not in commands:
-                commands[cmd] = {'port':payload["port"], 'ip':payload["ip"]}
-                print("service registered. %s %s" % (cmd, commands[cmd]))
-    return "service registered"
-
-@app.route("/send_sms")
-def send_sms():
-    body = request.args.get('body')
-    if args.pay:
-        print("sending sms: '" + body + "'")
-        res = requests.get("https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=L8wS8C77&to=+4526857540&Text=%s" % body, timeout=2)
-        print("res '%s'" % res)
-    else:
-        print("would have sent sms: '" + body + "'")
-    return "message sent"
-
-@app.route("/somepage")
-def somepage():
-    receivedutcdatetime = request.args.get('receivedutcdatetime')
-    receivedfromphonenumber = request.args.get('receivedfromphonenumber')
-    receivedbyphonenumber = request.args.get('receivedbyphonenumber')
-    body = request.args.get('body')
-    space = body.find(' ')
-    if space == -1:
-        cmd = body
-        args = ""
-    else:
-        cmd = body[:space]
-        args = body[space+1:]
-
-    return "Hello World! cmd = '" + cmd + "', args = '" + args + "' sure!\n"
-
-
-if __name__ == '__main__':
-
-
-    example = Broadcaster(3)
-    app.run(host="0.0.0.0", port=5000, threaded=True)
-
+sms_portal = SmsPortal()
+try:
+    while True:
+        time.sleep(2.0)
+except KeyboardInterrupt:
+    pass
+sms_portal.shut_down()

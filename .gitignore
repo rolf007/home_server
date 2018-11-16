@@ -1,0 +1,5 @@
+*.un~
+__pycache__
+ping_server/ip_list.json
+sms_portal/sms_password.json
+
