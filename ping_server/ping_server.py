@@ -1,11 +1,4 @@
 #!/usr/bin/env python
-# suresms.dk
-# http://developer.suresms.com/https/
-# https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=L8wS8C77&to=+4526857540&Text=Test001
-#Send Sms
-# curl "https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=L8wS8C77&to=+4526857540&Text=Test002"
-#Receive Sms:
-# curl "http://asmund.dk:5000/somepage?receivedutcdatetime=time&receivedfromphonenumber=from&receivedbyphonenumber=by&body=body"
 
 import json
 import os
@@ -37,40 +30,55 @@ def file_was_created():
     send_sms("%s%%20was%%20created" % "file")
 
 class PingThread(threading.Thread):
-    def __init__(self, interval=1):
+    def __init__(self, interval=1, ping_func=None):
         super().__init__()
+        if ping_func == None:
+            ping_func = self.real_ping
 
-        self.ip_list = self.load_obj("ip_list")
-        self.kill = threading.Event()
-        self.interval = interval
-        self.start()
+        self.ping_func = ping_func
+        self.ip_list = []
+        self.timeofday_alarms = []
+        if interval != 0:
+            self.kill = threading.Event()
+            self.interval = interval
+            self.start()
 
-    def load_obj(self, name):
-        with open(home_server_root + "/ping_server/" + name + '.json', 'rb') as f:
-            return json.load(f)
+    def add_ip(self, ip, user):
+        self.ip_list.append({"ip": ip, "user": user, "online": None})
+
+    def add_timeofday_alarm(self, start, end, weekdays, user):
+        self.timeofday_alarms.append({"start": start, "end": end, "weekdays": weekdays, "user": user})
+        print("alarms : %s" % self.timeofday_alarms)
+
+    def real_ping(self, ip):
+        print("pinging...")
+        return subprocess.call("ping -c1 -w1 %s" % ip, shell=True, stdout=devnull)
 
     def run(self):
         while True:
             print("Do somthoing....!")
-
-            file_name  = home_server_root + "/ping_server/ping_server.log"
-            with open(file_name, 'a') as f:
-                for ip in self.ip_list:
-                    x = subprocess.call("ping -c1 -w1 %s" % ip["ip"], shell=True, stdout=devnull)
-                    if x == 0:
-                        if "online" in ip and ip["online"] == False:
-                            ip_went_online(ip["name"])
-                        ip["online"] = True
-                    else:
-                        ip["online"] = False
-                f.write(strftime("%Y-%m-%d_%H:%M:%S", localtime()))
-                for r in self.ip_list:
-                    f.write(" %d" % (1 if "online" in r and r["online"] else 0))
-                f.write("\n")
+            self.do_something(localtime())
 
             is_killed = self.kill.wait(self.interval)
             if is_killed:
                 break
+
+    def do_something(self, now):
+        file_name  = home_server_root + "/ping_server/ping_server.log"
+        with open(file_name, 'a') as f:
+            for ip in self.ip_list:
+                x = self.ping_func(ip["ip"])
+                if x == 0:
+                    if ip["online"] == False:
+                        ip_went_online(ip["user"])
+                        print("tm_wday %s" % now.tm_wday)
+                    ip["online"] = True
+                else:
+                    ip["online"] = False
+            f.write(strftime("%Y-%m-%d_%H:%M:%S", now))
+            for r in self.ip_list:
+                f.write(" %d" % (1 if "online" in r and r["online"] else 0))
+            f.write("\n")
 
     def shut_down(self):
         print("stopping serving ping...")
@@ -107,9 +115,16 @@ class CheckFileThread(threading.Thread):
 class PingServer():
 
     def __init__(self):
+        ip_list = self.load_obj("ip_list")
         self.comm = Comm(5002, "ping_server", {"status": self.status})
-        self.ping_thread = PingThread(6)
+        self.ping_thread = PingThread(3, None)
+        for ip in ip_list:
+            self.ping_thread.add_ip(ip["ip"], ip["name"])
         #self.check_file_thread = CheckFileThread(3)
+
+    def load_obj(self, name):
+        with open(home_server_root + "/ping_server/" + name + '.json', 'rb') as f:
+            return json.load(f)
 
     def status(self, params):
         return (200, "All is fine!")
@@ -121,11 +136,12 @@ class PingServer():
 
 
 
-ping_server = PingServer()
-try:
-    while True:
-        time.sleep(2.0)
-        print(".....")
-except KeyboardInterrupt:
-    pass
-ping_server.shut_down()
+if __name__ == '__main__':
+    ping_server = PingServer()
+    try:
+        while True:
+            time.sleep(2.0)
+            print(".....")
+    except KeyboardInterrupt:
+        pass
+    ping_server.shut_down()
