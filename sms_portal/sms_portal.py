@@ -39,11 +39,16 @@ class SmsPortal():
             print("you must pay!")
         else:
             print("WARNING, you can't send SMS'es")
+        self.sms_cmds = {"p": self.cmd_p}
 
-# curl "http://asmund.dk:5100/somepage?receivedutcdatetime=time&receivedfromphonenumber=from&receivedbyphonenumber=by&body=body"
-# http://127.0.0.1:5100/somepage?receivedutcdatetime=time&receivedfromphonenumber=from&receivedbyphonenumber=by&body=body%20p=metallica
-    def sms_received(self, data):
-        print("sms_received '%s'" % data)
+    def cmd_p(self, args):
+        print("executing p(%s)" % args)
+        return "Ok. Playing."
+
+# curl "http://asmund.dk:5100/somepage?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=body"
+# http://127.0.0.1:5100/somepage?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=p%20metallica
+    def sms_received(self, data, ip, port):
+        print("sms_received '%s' from '%s:%d'" % (data, ip, port))
         query = urllib.parse.urlsplit(data).query.decode('ascii')
         func  = urllib.parse.urlsplit(data).path.decode('ascii')
         if func != "somepage":
@@ -62,6 +67,12 @@ class SmsPortal():
             cmd = body[:space]
             args = body[space+1:]
 
+        if cmd in self.sms_cmds:
+            sms_reply = self.sms_cmds[cmd](args)
+        else:
+            sms_reply = "Unknown command '%s', called with args '%s'" % (cmd, args)
+        self.do_send_sms(receivedfromphonenumber, sms_reply)
+
         print("cmd = '%s'" % cmd)
         print("args = '%s'" % args)
 
@@ -79,8 +90,9 @@ class SmsPortal():
             return (404, "sending sms requires a 'to'")
         text = params["text"][0]
         to = params["to"][0]
-        #to = "+4526857540"
-        #to = "+4540216259"
+        self.do_send_sms(to, text)
+
+    def do_send_sms(self, to, text):
         login = "Rolf"
         pw = self.sms_password
         if self.args.pay:

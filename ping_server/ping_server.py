@@ -37,18 +37,32 @@ class PingThread(threading.Thread):
 
         self.ping_func = ping_func
         self.ip_list = []
-        self.timeofday_alarms = []
+        self.alarms_timeofday = [] # alarm, if user is online on a given time
+        self.alarms_dayamount = [] # alarm, if user exceeds daily limit
+        self.alarms_onoffline = [] # alarm, if user changes online status
+
         if interval != 0:
             self.kill = threading.Event()
             self.interval = interval
             self.start()
 
-    def add_ip(self, ip, user):
-        self.ip_list.append({"ip": ip, "user": user, "online": None})
+    def add_ip(self, user, ip):
+        self.ip_list.append({"user": user, "ip": ip, "online": None})
 
-    def add_timeofday_alarm(self, start, end, weekdays, user):
-        self.timeofday_alarms.append({"start": start, "end": end, "weekdays": weekdays, "user": user})
-        print("alarms : %s" % self.timeofday_alarms)
+    def add_alarm_timeofday(self, user, start, end, weekdays="0123456"):
+        self.alarms_timeofday.append({"user": user, "weekdays": weekdays, "active": True, "start": start, "end": end})
+        print("alarms : %s" % self.alarms_timeofday)
+
+    def add_alarm_dayamount(self, user, amount, weekdays="0123456"):
+        self.alarms_dayamount.append({"user": user, "weekdays": weekdays, "active": True, "amount": amount})
+        print("alarms : %s" % self.alarms_dayamount)
+
+    def add_alarm_onoffline(self, user, onoff, weekdays="0123456"):
+        self.alarms_onoffline.append({"user": user, "weekdays": weekdays, "active": True, "onoff": onoff})
+        print("alarms : %s" % self.alarms_onoffline)
+
+    def alarm(self, msg):
+        print("msg: %s" % msg)
 
     def real_ping(self, ip):
         print("pinging...")
@@ -70,8 +84,9 @@ class PingThread(threading.Thread):
                 x = self.ping_func(ip["ip"])
                 if x == 0:
                     if ip["online"] == False:
-                        ip_went_online(ip["user"])
-                        print("tm_wday %s" % now.tm_wday)
+                        for a in self.alarms_onoffline:
+                            if (ip["user"] == a["user"]) and (str(now.tm_wday) in a["weekdays"]) and (a["active"]):
+                                self.alarm("%s went online" % ip["user"])
                     ip["online"] = True
                 else:
                     ip["online"] = False
@@ -119,7 +134,7 @@ class PingServer():
         self.comm = Comm(5002, "ping_server", {"status": self.status})
         self.ping_thread = PingThread(3, None)
         for ip in ip_list:
-            self.ping_thread.add_ip(ip["ip"], ip["name"])
+            self.ping_thread.add_ip(ip["name"], ip["ip"])
         #self.check_file_thread = CheckFileThread(3)
 
     def load_obj(self, name):

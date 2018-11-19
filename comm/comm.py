@@ -32,7 +32,7 @@ class UnicastListener():
                 if a != -1:
                     b = message.find(b' ', a)
                     if b != -1:
-                        ret = self.cb(message[a+1:b])
+                        ret = self.cb(message[a+1:b], addr[0], addr[1])
                 #Send one HTTP header line into socket
                 if ret[0] == 200:
                     errorMsg = "OK"
@@ -181,7 +181,7 @@ class Comm():
             s.close()
         return ip
 
-    def uc_received(self, data):
+    def uc_received(self, data, ip, port):
         print("uc_received '%s'" % data)
         query = urllib.parse.urlsplit(data).query.decode('ascii')
         func  = urllib.parse.urlsplit(data).path.decode('ascii')
