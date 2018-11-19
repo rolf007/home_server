@@ -20,15 +20,6 @@ from comm import Comm
 #        {"name": "Rxfce", "ip": "192.168.0.11"}]
 devnull = open(os.devnull, 'w')
 
-def send_sms(text):
-    print("sending sms '%s'..." % text)
-
-def ip_went_online(name):
-    send_sms("%s%%20went%%20online" % name)
-
-def file_was_created():
-    send_sms("%s%%20was%%20created" % "file")
-
 class PingThread(threading.Thread):
     def __init__(self, interval=1, ping_func=None):
         super().__init__()
@@ -37,36 +28,40 @@ class PingThread(threading.Thread):
 
         self.ping_func = ping_func
         self.ip_list = []
-        self.alarms_timeofday = [] # alarm, if user is online on a given time
-        self.alarms_dayamount = [] # alarm, if user exceeds daily limit
-        self.alarms_onoffline = [] # alarm, if user changes online status
+        self.alarms = []
+        self.interval = interval
 
-        if interval != 0:
+        if ping_func == None:
             self.kill = threading.Event()
-            self.interval = interval
             self.start()
 
     def add_ip(self, user, ip):
-        self.ip_list.append({"user": user, "ip": ip, "online": None})
+        self.ip_list.append({"user": user, "ip": ip, "online": None, "amount": 0.0})
+
+    def human_time_to_minutes(self, s):
+        c = s.find(':')
+        if c != -1:
+            h = int(s[:c])
+            m = int(s[c+1:])
+            return h*60+m
+        return 0
+
 
     def add_alarm_timeofday(self, user, start, end, weekdays="0123456"):
-        self.alarms_timeofday.append({"user": user, "weekdays": weekdays, "active": True, "start": start, "end": end})
-        print("alarms : %s" % self.alarms_timeofday)
+        # alarm, if user is online on a given time
+        self.alarms.append({"type": "timeofday", "user": user, "weekdays": weekdays, "active": True, "start": self.human_time_to_minutes(start), "end": self.human_time_to_minutes(end)})
 
     def add_alarm_dayamount(self, user, amount, weekdays="0123456"):
-        self.alarms_dayamount.append({"user": user, "weekdays": weekdays, "active": True, "amount": amount})
-        print("alarms : %s" % self.alarms_dayamount)
+        # alarm, if user exceeds daily limit
+        self.alarms.append({"type": "dayamount", "user": user, "weekdays": weekdays, "active": True, "amount": amount})
 
-    def add_alarm_onoffline(self, user, onoff, weekdays="0123456"):
-        self.alarms_onoffline.append({"user": user, "weekdays": weekdays, "active": True, "onoff": onoff})
-        print("alarms : %s" % self.alarms_onoffline)
-
-    def alarm(self, msg):
-        print("msg: %s" % msg)
+    def add_alarm_onoffline(self, user, onoff="-+", weekdays="0123456"):
+        # alarm, if user changes online status
+        self.alarms.append({"type": "onoffline", "user": user, "weekdays": weekdays, "active": True, "onoff": onoff})
 
     def real_ping(self, ip):
         print("pinging...")
-        return subprocess.call("ping -c1 -w1 %s" % ip, shell=True, stdout=devnull)
+        return subprocess.call("ping -c1 -w1 %s" % ip, shell=True, stdout=devnull) == 0
 
     def run(self):
         while True:
@@ -78,54 +73,33 @@ class PingThread(threading.Thread):
                 break
 
     def do_something(self, now):
-        file_name  = home_server_root + "/ping_server/ping_server.log"
-        with open(file_name, 'a') as f:
-            for ip in self.ip_list:
-                x = self.ping_func(ip["ip"])
-                if x == 0:
-                    if ip["online"] == False:
-                        for a in self.alarms_onoffline:
-                            if (ip["user"] == a["user"]) and (str(now.tm_wday) in a["weekdays"]) and (a["active"]):
-                                self.alarm("%s went online" % ip["user"])
-                    ip["online"] = True
-                else:
-                    ip["online"] = False
-            f.write(strftime("%Y-%m-%d_%H:%M:%S", now))
-            for r in self.ip_list:
-                f.write(" %d" % (1 if "online" in r and r["online"] else 0))
-            f.write("\n")
+        alarm_msgs = []
+        for ip in self.ip_list:
+            online = self.ping_func(ip["ip"])
+            if online:
+                ip["amount"] += self.interval/60.0
+            for a in self.alarms:
+                if (ip["user"] == a["user"]) and (str(now.tm_wday) in a["weekdays"]) and (a["active"]):
+                    if a["type"] == "onoffline":
+                        if (ip["online"] == False) and (online) and ('+' in a["onoff"]):
+                            alarm_msgs.append("%s went online" % ip["user"])
+                        if (ip["online"] == True) and (not online) and ('-' in a["onoff"]):
+                            alarm_msgs.append("%s went offline" % ip["user"])
+                    elif a["type"] == "timeofday":
+                        if (ip["online"] == False) and (online):
+                            if (now.tm_hour*60+now.tm_min >= a["start"]) and (now.tm_hour*60+now.tm_min < a["end"]):
+                                alarm_msgs.append("%s went online at %d:%d" % (ip["user"], now.tm_hour, now.tm_min))
+                    elif a["type"] == "dayamount":
+                        if ip["amount"] >= a["amount"]:
+                            alarm_msgs.append("%s exceeded amount %s" % (ip["user"], a["amount"]))
+                        pass
+            ip["online"] = online
+        return alarm_msgs
 
     def shut_down(self):
         print("stopping serving ping...")
         self.kill.set()
         self.join()
-
-class CheckFileThread(threading.Thread):
-    def __init__(self, interval=1):
-        super().__init__()
-        self.kill = threading.Event()
-        self.interval = interval
-        self.exists = None
-        self.start()
-
-    def run(self):
-        while True:
-            exists = os.path.exists("check")
-            if self.exists == False and exists == True:
-                file_was_created()
-            if self.exists == True and exists == False:
-                print("file was deleted")
-            self.exists = exists
-
-            is_killed = self.kill.wait(self.interval)
-            if is_killed:
-                break
-
-    def shut_down(self):
-        print("stopping serving check file...")
-        self.kill.set()
-        self.join()
-
 
 class PingServer():
 
@@ -135,7 +109,6 @@ class PingServer():
         self.ping_thread = PingThread(3, None)
         for ip in ip_list:
             self.ping_thread.add_ip(ip["name"], ip["ip"])
-        #self.check_file_thread = CheckFileThread(3)
 
     def load_obj(self, name):
         with open(home_server_root + "/ping_server/" + name + '.json', 'rb') as f:
@@ -145,7 +118,6 @@ class PingServer():
         return (200, "All is fine!")
 
     def shut_down(self):
-        #self.check_file_thread.shut_down()
         self.ping_thread.shut_down()
         self.comm.shut_down()
 
