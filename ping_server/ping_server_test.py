@@ -40,7 +40,7 @@ class TestPingThread(unittest.TestCase):
     def test_dayamount(self):
         ping_thread = PingThread(60, self.mock_ping) # 60 seconds interval
         ping_thread.add_ip("S", "10.0.0.1")
-        ping_thread.add_ip("C", "10.0.0.2")
+        #ping_thread.add_ip("C", "10.0.0.2")
         ping_thread.add_alarm_dayamount("S", 3, "01234") # 3 minutes max amount
         test_time = time.struct_time((2012, 1, 1, 0, 0, 0, 1, 0, 0))
         self.assertEqual([], ping_thread.do_something(test_time))
@@ -49,6 +49,25 @@ class TestPingThread(unittest.TestCase):
         self.assertEqual([], ping_thread.do_something(test_time))
         self.assertEqual([], ping_thread.do_something(test_time))
         self.assertEqual(["S exceeded amount 3"], ping_thread.do_something(test_time))
+        self.assertEqual([], ping_thread.do_something(test_time))
+
+    def test_m_get_log(self):
+        ping_thread = PingThread(60, self.mock_ping)
+        ping_thread.add_ip("S", "10.0.0.1")
+        ping_thread.do_something(time.struct_time((2012, 1, 1, 0, 0, 0, 1, 0, 0)))
+        self.online = {"10.0.0.1"}
+        ping_thread.do_something(time.struct_time((2012, 1, 1, 0, 5, 0, 1, 0, 0)))
+        ping_thread.do_something(time.struct_time((2012, 1, 1, 0, 15, 0, 1, 0, 0)))
+        self.online = {}
+        ping_thread.do_something(time.struct_time((2012, 1, 1, 3, 55, 0, 1, 0, 0)))
+        self.assertEqual("+0:05\n-3:55\n", ping_thread.m_get_log("S"))
+
+        self.online = {"10.0.0.1"}
+        ping_thread.do_something(time.struct_time((2012, 1, 2, 4, 0, 0, 1, 0, 0)))
+        self.online = {}
+        ping_thread.do_something(time.struct_time((2012, 1, 2, 5, 0, 0, 1, 0, 0)))
+        self.assertEqual("+4:00\n-5:00\n", ping_thread.m_get_log("S"))
+        self.assertEqual("+0:05\n-3:55\n", ping_thread.m_get_log("S", (2012,1,1)))
 
 if __name__ == '__main__':
     unittest.main()

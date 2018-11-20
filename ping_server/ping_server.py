@@ -30,13 +30,14 @@ class PingThread(threading.Thread):
         self.ip_list = []
         self.alarms = []
         self.interval = interval
+        self.last_day = None
 
         if ping_func == None:
             self.kill = threading.Event()
             self.start()
 
     def add_ip(self, user, ip):
-        self.ip_list.append({"user": user, "ip": ip, "online": None, "amount": 0.0})
+        self.ip_list.append({"user": user, "ip": ip, "online": None, "amount": 0.0, "log": []})
 
     def human_time_to_minutes(self, s):
         c = s.find(':')
@@ -73,28 +74,72 @@ class PingThread(threading.Thread):
                 break
 
     def do_something(self, now):
+        if now.tm_mday != self.last_day:
+            for ip in self.ip_list:
+                ip["amount"] = 0.0
+            self.last_day = now.tm_mday
+
         alarm_msgs = []
         for ip in self.ip_list:
             online = self.ping_func(ip["ip"])
+            went_online = ip["online"] == False and online == True
+            went_offline = ip["online"] == True and online == False
+            old_amount = ip["amount"]
             if online:
                 ip["amount"] += self.interval/60.0
+            if went_online:
+                ip["log"].append((now, True))
+            if went_offline:
+                ip["log"].append((now, False))
             for a in self.alarms:
                 if (ip["user"] == a["user"]) and (str(now.tm_wday) in a["weekdays"]) and (a["active"]):
                     if a["type"] == "onoffline":
-                        if (ip["online"] == False) and (online) and ('+' in a["onoff"]):
+                        if (went_online) and ('+' in a["onoff"]):
                             alarm_msgs.append("%s went online" % ip["user"])
-                        if (ip["online"] == True) and (not online) and ('-' in a["onoff"]):
+                        if (went_offline) and ('-' in a["onoff"]):
                             alarm_msgs.append("%s went offline" % ip["user"])
                     elif a["type"] == "timeofday":
-                        if (ip["online"] == False) and (online):
+                        if (went_online):
                             if (now.tm_hour*60+now.tm_min >= a["start"]) and (now.tm_hour*60+now.tm_min < a["end"]):
                                 alarm_msgs.append("%s went online at %d:%d" % (ip["user"], now.tm_hour, now.tm_min))
                     elif a["type"] == "dayamount":
-                        if ip["amount"] >= a["amount"]:
+                        print( ip["amount"], a["amount"] , old_amount,a["amount"])
+                        if ip["amount"] >= a["amount"] and old_amount < a["amount"]:
                             alarm_msgs.append("%s exceeded amount %s" % (ip["user"], a["amount"]))
                         pass
             ip["online"] = online
         return alarm_msgs
+
+    def get_log(self, user, day=None):
+        for ip in self.ip_list:
+            if ip["user"] == user:
+                full_log = ip["log"]
+                if day == None:
+                    best_score = -1
+                    for entry in full_log:
+                        score = entry[0].tm_year*400*40 + entry[0].tm_mon*40 + entry[0].tm_mday
+                        if score > best_score:
+                            best_score = score
+                            day = (entry[0].tm_year, entry[0].tm_mon, entry[0].tm_mday)
+                day_log = []
+                for entry in full_log:
+                    if entry[0].tm_year == day[0] and entry[0].tm_mon == day[1] and entry[0].tm_mday == day[2]:
+                        day_log.append(entry)
+                return day_log
+        return None
+
+    def m_get_log(self, user, day=None):
+        log = self.get_log(user, day)
+        if log == None:
+            return "unknown user '%s'" % user
+        mlog = ""
+        for entry in log:
+            if entry[1] == True:
+                mlog += '+'
+            else:
+                mlog += '-'
+            mlog += "%d:%02d\n" % (entry[0].tm_hour, entry[0].tm_min)
+        return mlog[-120:]
 
     def shut_down(self):
         print("stopping serving ping...")
