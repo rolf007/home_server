@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import json
 import os
@@ -21,23 +21,24 @@ from comm import Comm
 devnull = open(os.devnull, 'w')
 
 class PingThread(threading.Thread):
-    def __init__(self, interval=1, ping_func=None):
+    def __init__(self, interval, alarm_cb, ping_func=None):
         super().__init__()
         if ping_func == None:
-            ping_func = self.real_ping
-
-        self.ping_func = ping_func
+            self.ping_func = self.real_ping
+        else:
+            self.ping_func = ping_func
         self.ip_list = []
         self.alarms = []
-        self.interval = interval
-        self.last_day = None
+        self.last_time = None
+        self.alarm_cb = alarm_cb
 
         if ping_func == None:
             self.kill = threading.Event()
+            self.interval = interval
             self.start()
 
     def add_ip(self, user, ip):
-        self.ip_list.append({"user": user, "ip": ip, "online": None, "amount": 0.0, "log": []})
+        self.ip_list.append({"user": user, "ip": ip, "online": None, "log": [], "log_end":None})
 
     def human_time_to_minutes(self, s):
         c = s.find(':')
@@ -48,25 +49,25 @@ class PingThread(threading.Thread):
         return 0
 
 
-    def add_alarm_timeofday(self, user, start, end, weekdays="0123456"):
+    def add_alarm_timeofday(self, user, to, start, end, weekdays="0123456"):
         # alarm, if user is online on a given time
-        self.alarms.append({"type": "timeofday", "user": user, "weekdays": weekdays, "active": True, "start": self.human_time_to_minutes(start), "end": self.human_time_to_minutes(end)})
+        self.alarms.append({"type": "timeofday", "user": user, "weekdays": weekdays, "active": True, "to": to, "start": self.human_time_to_minutes(start), "end": self.human_time_to_minutes(end)})
 
-    def add_alarm_dayamount(self, user, amount, weekdays="0123456"):
+    def add_alarm_dayamount(self, user, to, amount, weekdays="0123456"):
         # alarm, if user exceeds daily limit
-        self.alarms.append({"type": "dayamount", "user": user, "weekdays": weekdays, "active": True, "amount": amount})
+        self.alarms.append({"type": "dayamount", "user": user, "weekdays": weekdays, "active": True, "to": to, "amount": amount})
 
-    def add_alarm_onoffline(self, user, onoff="-+", weekdays="0123456"):
+    def add_alarm_onoffline(self, user, to, onoff="-+", weekdays="0123456"):
         # alarm, if user changes online status
-        self.alarms.append({"type": "onoffline", "user": user, "weekdays": weekdays, "active": True, "onoff": onoff})
+        self.alarms.append({"type": "onoffline", "user": user, "weekdays": weekdays, "active": True, "to": to, "onoff": onoff})
 
     def real_ping(self, ip):
-        print("pinging...")
-        return subprocess.call("ping -c1 -w1 %s" % ip, shell=True, stdout=devnull) == 0
+        ping_result = subprocess.call("ping -c1 -w1 %s" % ip, shell=True, stdout=devnull) == 0
+        #print("ping '%s'. Result: %s" % (ip, ping_result))
+        return ping_result
 
     def run(self):
         while True:
-            print("Do somthoing....!")
             self.do_something(localtime())
 
             is_killed = self.kill.wait(self.interval)
@@ -74,53 +75,73 @@ class PingThread(threading.Thread):
                 break
 
     def do_something(self, now):
-        if now.tm_mday != self.last_day:
-            for ip in self.ip_list:
-                ip["amount"] = 0.0
-            self.last_day = now.tm_mday
-
-        alarm_msgs = []
         for ip in self.ip_list:
+            if self.last_time != None:
+                old_amount = self.calc_amount(ip)
+            else:
+                old_amount = 0.0
+            if self.last_time and now.tm_mday != self.last_time.tm_mday:
+                # it's a new day.
+                if ip["online"]:
+                    midnight_yesterday = time.struct_time((self.last_time.tm_year, self.last_time.tm_mon, self.last_time.tm_mday, 24, 0, 0, self.last_time.tm_wday, self.last_time.tm_yday, self.last_time.tm_isdst))
+                    ip["log"].append((midnight_yesterday, False))
+                    midnight_today = time.struct_time((now.tm_year, now.tm_mon, now.tm_mday, 0, 0, 0, now.tm_wday, now.tm_yday, now.tm_isdst))
+                    ip["log"].append((midnight_today, True))
+
+            ip["log_end"] = now
             online = self.ping_func(ip["ip"])
             went_online = ip["online"] == False and online == True
             went_offline = ip["online"] == True and online == False
-            old_amount = ip["amount"]
-            if online:
-                ip["amount"] += self.interval/60.0
-            if went_online:
+            if ip["online"] != True and online == True:
                 ip["log"].append((now, True))
             if went_offline:
                 ip["log"].append((now, False))
+            amount = self.calc_amount(ip)
             for a in self.alarms:
                 if (ip["user"] == a["user"]) and (str(now.tm_wday) in a["weekdays"]) and (a["active"]):
                     if a["type"] == "onoffline":
                         if (went_online) and ('+' in a["onoff"]):
-                            alarm_msgs.append("%s went online" % ip["user"])
+                            self.alarm_cb("%s went online" % ip["user"], a["to"])
                         if (went_offline) and ('-' in a["onoff"]):
-                            alarm_msgs.append("%s went offline" % ip["user"])
+                            self.alarm_cb("%s went offline" % ip["user"], a["to"])
                     elif a["type"] == "timeofday":
                         if (went_online):
                             if (now.tm_hour*60+now.tm_min >= a["start"]) and (now.tm_hour*60+now.tm_min < a["end"]):
-                                alarm_msgs.append("%s went online at %d:%d" % (ip["user"], now.tm_hour, now.tm_min))
+                                self.alarm_cb("%s went online at %d:%d" % (ip["user"], now.tm_hour, now.tm_min), a["to"])
                     elif a["type"] == "dayamount":
-                        print( ip["amount"], a["amount"] , old_amount,a["amount"])
-                        if ip["amount"] >= a["amount"] and old_amount < a["amount"]:
-                            alarm_msgs.append("%s exceeded amount %s" % (ip["user"], a["amount"]))
-                        pass
+                        if amount >= a["amount"] and old_amount < a["amount"]:
+                            self.alarm_cb("%s exceeded amount %s" % (ip["user"], a["amount"]), a["to"])
             ip["online"] = online
-        return alarm_msgs
+        self.last_time = now
+
+    def calc_amount(self, ip, day=None):
+        if ip["log_end"] == None:
+            return 0.0
+        if day == None:
+            day = (ip["log_end"].tm_year, ip["log_end"].tm_mon, ip["log_end"].tm_mday)
+        amount = 0.0
+        online_time = None
+        for entry in ip["log"]:
+            if entry[0].tm_year == day[0] and entry[0].tm_mon == day[1] and entry[0].tm_mday == day[2]:
+                if entry[1] == True:
+                    online_time = (entry[0].tm_hour, entry[0].tm_min)
+                if entry[1] == False and online_time != None:
+                    amount += (entry[0].tm_hour - online_time[0])*60 + (entry[0].tm_min - online_time[1])
+                    online_time = None
+        if online_time:
+            amount += (ip["log_end"].tm_hour - online_time[0])*60 + (ip["log_end"].tm_min - online_time[1])
+        return amount
+
+
 
     def get_log(self, user, day=None):
         for ip in self.ip_list:
             if ip["user"] == user:
+                if ip["log_end"] == None:
+                    return []
                 full_log = ip["log"]
                 if day == None:
-                    best_score = -1
-                    for entry in full_log:
-                        score = entry[0].tm_year*400*40 + entry[0].tm_mon*40 + entry[0].tm_mday
-                        if score > best_score:
-                            best_score = score
-                            day = (entry[0].tm_year, entry[0].tm_mon, entry[0].tm_mday)
+                    day = (ip["log_end"].tm_year, ip["log_end"].tm_mon, ip["log_end"].tm_mday)
                 day_log = []
                 for entry in full_log:
                     if entry[0].tm_year == day[0] and entry[0].tm_mon == day[1] and entry[0].tm_mday == day[2]:
@@ -135,10 +156,23 @@ class PingThread(threading.Thread):
         mlog = ""
         for entry in log:
             if entry[1] == True:
-                mlog += '+'
+                mlog += '\n+'
             else:
                 mlog += '-'
-            mlog += "%d:%02d\n" % (entry[0].tm_hour, entry[0].tm_min)
+            mlog += "%d:%02d" % (entry[0].tm_hour, entry[0].tm_min)
+        for ip in self.ip_list:
+            if ip["user"] == user:
+                mlog += "\n=%d" % self.calc_amount(ip, day)
+        mlog = mlog[1:]
+        return mlog[-120:]
+
+    def m_get_status(self):
+        mlog = ""
+        for ip in self.ip_list:
+            if ip["online"]:
+                if mlog != "":
+                    mlog += ", "
+                mlog += "%s %d" % (ip["user"], self.calc_amount(ip))
         return mlog[-120:]
 
     def shut_down(self):
@@ -150,17 +184,35 @@ class PingServer():
 
     def __init__(self):
         ip_list = self.load_obj("ip_list")
-        self.comm = Comm(5002, "ping_server", {"status": self.status})
-        self.ping_thread = PingThread(3, None)
+        alarms = self.load_obj("alarms")
+        self.comm = Comm(5002, "ping_server", {"status": self.status, "log": self.log})
+        self.ping_thread = PingThread(3, self.alarm_received, None)
         for ip in ip_list:
             self.ping_thread.add_ip(ip["name"], ip["ip"])
+        for a in alarms:
+            if a["type"] == "timeofday":
+                self.ping_thread.add_alarm_timeofday(a["user"], a["to"], a["start"], a["end"], a["weekdays"])
+            elif a["type"] == "dayamount":
+                self.ping_thread.add_alarm_dayamount(a["user"], a["to"], a["amount"], a["weekdays"])
+            elif a["type"] == "onoffline":
+                self.ping_thread.add_alarm_onoffline(a["user"], a["to"], a["onoff"], a["weekdays"])
+
+    def alarm_received(self, alarm, to):
+        res = self.comm.call("sms_portal", "send", {"text": [alarm], "to": [to]})
+        print("PingServer::alarm_received: %s " % alarm)
 
     def load_obj(self, name):
         with open(home_server_root + "/ping_server/" + name + '.json', 'rb') as f:
             return json.load(f)
 
     def status(self, params):
-        return (200, "All is fine!")
+        return (200, self.ping_thread.m_get_status())
+
+    def log(self, params):
+        if "user" not in params:
+            return (404, "function 'log' requires 'user'")
+        user = params["user"][0]
+        return (200, self.ping_thread.m_get_log(user))
 
     def shut_down(self):
         self.ping_thread.shut_down()
@@ -173,7 +225,6 @@ if __name__ == '__main__':
     try:
         while True:
             time.sleep(2.0)
-            print(".....")
     except KeyboardInterrupt:
         pass
     ping_server.shut_down()

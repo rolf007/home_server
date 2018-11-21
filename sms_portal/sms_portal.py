@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # suresms.dk
 # http://developer.suresms.com/https/
@@ -90,7 +90,7 @@ class SmsPortal():
             return (404, "sending sms requires a 'to'")
         text = params["text"][0]
         to = params["to"][0]
-        self.do_send_sms(to, text)
+        return self.do_send_sms(to, text)
 
     def do_send_sms(self, to, text):
         login = "Rolf"

@@ -4,7 +4,7 @@ import socket
 import struct
 import threading
 import time
-import urllib
+import urllib.parse
 
 class UnicastListener():
     def __init__(self, cb, port):
@@ -163,7 +163,7 @@ class Comm():
         self.others = {}
         self.multicast_listener = MulticastListener(lambda data: self.mc_received(data))
         self.multicast_sender = MulticastSender(service_name, list(functions.keys()))
-        self.unicast_listener = UnicastListener(lambda data: self.uc_received(data), self.port)
+        self.unicast_listener = UnicastListener(self.uc_received, self.port)
         self.unicast_sender = UnicastSender()
         start_sleep = random.randint(3000,3500)/1000.0
         self.timer = threading.Timer(start_sleep, self.send_im_here)
