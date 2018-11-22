@@ -18,6 +18,7 @@ import urllib
 
 
 home_server_root = os.path.split(sys.path[0])[0]
+home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
 from comm import Comm
 from comm import UnicastListener
@@ -79,7 +80,7 @@ class SmsPortal():
         return (200, "sms handled ok")
 
     def load_obj(self, name):
-        with open(home_server_root + "/sms_portal/" + name + '.json', 'rb') as f:
+        with open(os.path.join(home_server_config, name + '.json'), 'rb') as f:
             return json.load(f)
 
     # http://127.0.0.1:5003/send?text=hemmelig_token&to=+4526857540

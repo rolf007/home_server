@@ -209,7 +209,7 @@ class Comm():
         for other in self.others:
             if self.others[other]["service"] == service:
                 return self.unicast_sender.send(self.others[other]["ip"], self.others[other]["port"], function, args)
-        return (503, "Serive '%s' not available." % service)
+        return (503, "Service '%s' not available." % service)
 
     def shut_down(self):
         if self.port:

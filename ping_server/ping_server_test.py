@@ -8,7 +8,7 @@ class TestPingThread(unittest.TestCase):
 
     def setUp(self):
         self.online = set()
-        self.ping_thread = PingThread(60, self.mock_alarm, self.mock_ping)
+        self.ping_thread = PingThread(60, self.mock_ping)
         self.alarms = []
 
     def mock_ping(self, ip):
@@ -28,24 +28,51 @@ class TestPingThread(unittest.TestCase):
     def test_onoffline(self):
         self.ping_thread.add_ip("S", "10.0.0.1")
         self.ping_thread.add_ip("C", "10.0.0.2")
-        self.ping_thread.add_alarm_onoffline("S", "-+", "1")
+        self.ping_thread.add_alarm_onoffline("S", self.mock_alarm, "-+", "1")
         self.assertEqual([], self.do_something(2012, 1, 1, 0, 0, 1))
         self.online = {"10.0.0.1"}
-        self.assertEqual(["S went online"], self.do_something(2012, 1, 1, 0, 0, 1))
+        self.assertEqual(["S went online"], self.do_something(2012, 1, 1, 0, 5, 1))
+        self.online = {}
+        self.assertEqual([], self.do_something(2012, 1, 1, 0, 10, 1))
+        self.online = {"10.0.0.1"}
+        self.assertEqual([], self.do_something(2012, 1, 1, 0, 15, 1))
+        self.ping_thread.reset_alarms()
+        self.online = {}
+        self.assertEqual(["S went offline"], self.do_something(2012, 1, 1, 0, 20, 1))
+
+    def test_onoffline_online_at_start(self):
+        self.ping_thread.add_ip("S", "10.0.0.1")
+        self.ping_thread.add_alarm_onoffline("S", self.mock_alarm, "-+", "1")
+        self.online = {"10.0.0.1"}
+        self.assertEqual([], self.do_something(2012, 1, 1, 0, 0, 1))
 
     def test_timeofday(self):
         self.ping_thread.add_ip("S", "10.0.0.1")
         self.ping_thread.add_ip("C", "10.0.0.2")
-        self.ping_thread.add_alarm_timeofday("S", "1:00", "7:00", "01234")
+        self.ping_thread.add_alarm_timeofday("S", self.mock_alarm, "1:00", "7:00", "01234")
         self.assertEqual([], self.do_something(2012, 1, 1, 0, 30, 1))
         self.online = {"10.0.0.1"}
-        self.assertEqual(["S went online at 1:30"], self.do_something(2012, 1, 1, 1, 30, 1))
+        self.assertEqual(["S is online at 1:30"], self.do_something(2012, 1, 1, 1, 30, 1))
         self.assertEqual([], self.do_something(2012, 1, 1, 2, 30, 1))
+        self.online = {}
+        self.assertEqual([], self.do_something(2012, 1, 1, 2, 40, 1))
+        self.online = {"10.0.0.1"}
+        self.assertEqual([], self.do_something(2012, 1, 1, 2, 50, 1))
+        self.online = {}
+        self.assertEqual([], self.do_something(2012, 1, 2, 1, 10, 1))
+        self.online = {"10.0.0.1"}
+        self.assertEqual(["S is online at 1:15"], self.do_something(2012, 1, 2, 1, 15, 1))
+
+    def test_timeofday_online_at_start(self):
+        self.ping_thread.add_ip("S", "10.0.0.1")
+        self.ping_thread.add_alarm_timeofday("S", self.mock_alarm, "1:00", "7:00", "01234")
+        self.online = {"10.0.0.1"}
+        self.assertEqual([], self.do_something(2012, 1, 1, 1, 30, 1))
 
     def test_dayamount(self):
         self.ping_thread.add_ip("S", "10.0.0.1")
         self.ping_thread.add_ip("C", "10.0.0.2")
-        self.ping_thread.add_alarm_dayamount("S", 3, "01234") # 3 minutes max amount
+        self.ping_thread.add_alarm_dayamount("S", self.mock_alarm, 3, "01234") # 3 minutes max amount
         self.assertEqual([], self.do_something(2012, 1, 1, 0, 0, 1))
         self.assertEqual([], self.do_something(2012, 1, 1, 0, 1, 1))
         self.online = {"10.0.0.1"}
