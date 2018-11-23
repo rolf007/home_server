@@ -166,17 +166,16 @@ class PingThread(threading.Thread):
         for ip in self.ip_list:
             if ip["user"] == user:
                 mlog += "\n=%d" % self.calc_amount(ip, day)
-        mlog = mlog[1:]
-        return mlog[-120:]
+        return mlog[1:]
 
     def m_get_status(self):
-        mlog = ""
+        mstatus = ""
         for ip in self.ip_list:
             if ip["online"]:
-                if mlog != "":
-                    mlog += ", "
-                mlog += "%s %d" % (ip["user"], self.calc_amount(ip))
-        return mlog[-120:]
+                if mstatus != "":
+                    mstatus += ", "
+                mstatus += "%s %d" % (ip["user"], self.calc_amount(ip))
+        return mstatus
 
     def shut_down(self):
         print("stopping serving ping...")
@@ -210,13 +209,19 @@ class PingServer():
             return json.load(f)
 
     def status(self, params):
-        return (200, self.ping_thread.m_get_status())
+        status = self.ping_thread.m_get_status()
+        if "m" in params:
+            status = status[-120:]
+        return (200, status)
 
     def log(self, params):
         if "user" not in params:
             return (404, "function 'log' requires 'user'")
         user = params["user"][0]
-        return (200, self.ping_thread.m_get_log(user))
+        log = self.ping_thread.m_get_log(user)
+        if "m" in params:
+            log = log[-120:]
+        return (200, log)
 
     def reset(self, params):
         self.ping_thread.reset_alarms()
