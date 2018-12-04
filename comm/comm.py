@@ -6,6 +6,9 @@ import threading
 import time
 import urllib.parse
 
+def debug_print(x):
+    print(str(x).encode('unicode_escape').decode())
+
 class UnicastListener():
     def __init__(self, cb, port):
         self.cb = cb
@@ -27,12 +30,18 @@ class UnicastListener():
                 #Establish the connection
                 connectionSocket, addr = self.serverSocket.accept()
                 message = connectionSocket.recv(1024)
+                message = message.decode('utf-8', 'ignore')
                 ret = (404, "Not found")
-                a = message.find(b'/')
+                a = message.find('/')
                 if a != -1:
-                    b = message.find(b' ', a)
+                    b = message.find(' ', a)
                     if b != -1:
-                        ret = self.cb(message[a+1:b], addr[0], addr[1])
+                        data = message[a+1:b]
+                        debug_print("comm listener received %s" % data)
+                        path  = urllib.parse.urlsplit(data).path
+                        query = urllib.parse.urlsplit(data).query
+                        params = urllib.parse.parse_qs(query)
+                        ret = self.cb(path, params, addr[0], addr[1])
                 #Send one HTTP header line into socket
                 if ret[0] == 200:
                     errorMsg = "OK"
@@ -40,7 +49,8 @@ class UnicastListener():
                     errorMsg = "Not Found"
                 else:
                     errorMsg = "Other error"
-                connectionSocket.send(bytes('HTTP/1.0 %d %s\r\n\r\n%s' % (ret[0], errorMsg, ret[1]), 'ascii'))
+                debug_print("comm listener replying %s" % ret[1])
+                connectionSocket.send(bytes('HTTP/1.0 %d %s\r\n\r\n' % (ret[0], errorMsg), 'ascii') + ret[1].encode('utf-8', 'ignore'))
                 #connectionSocket.send('404 Not Found')
                 connectionSocket.close()
             except socket.timeout:
@@ -61,11 +71,13 @@ class UnicastSender():
 
         try:
             s.connect((ip, port))
-            s.sendall(bytes("GET /%s?%s HTTP/1.1\r\nHost: %s\r\n\r\n" % (function, urllib.parse.urlencode(args, doseq=True), ip), 'ascii'))
+            req = "%s?%s" % (function, urllib.parse.urlencode(args, doseq=True))
+            debug_print("sender sending %s" % req)
+            s.sendall(bytes("GET /%s HTTP/1.1\r\nHost: %s\r\n\r\n" % (req, ip), 'ascii'))
             ret_code = 500
             ret = "undefined"
-            r = s.recv(4096).decode('ascii', 'ignore')
-            print("r = '%s'" % r)
+            r = s.recv(4096).decode('utf-8', 'ignore')
+            debug_print("sender received = %s" % r)
             a = r.find(' ')
             if a != -1:
                 b = r.find(' ', a+1)
@@ -75,6 +87,7 @@ class UnicastSender():
                     if c != -1:
                         ret = r[c+4:]
             s.close()
+            debug_print("sender received %s" % ret)
             return (ret_code, ret)
         except ConnectionRefusedError:
             print("Can't send. Connection refused!")
@@ -181,14 +194,11 @@ class Comm():
             s.close()
         return ip
 
-    def uc_received(self, data, ip, port):
-        print("uc_received '%s'" % data)
-        query = urllib.parse.urlsplit(data).query.decode('ascii')
-        func  = urllib.parse.urlsplit(data).path.decode('ascii')
-        params = urllib.parse.parse_qs(query)
-        if func in self.functions:
-            return self.functions[func](params)
-        return (404, "Unknown function '%s'" % func)
+    def uc_received(self, path, params, ip, port):
+        debug_print("uc_received: '%s(%s)' from '%s:%d'" % (path, str(params), ip, port))
+        if path in self.functions:
+            return self.functions[path](params)
+        return (404, "Unknown function '%s'" % path)
 
     def mc_received(self, data):
         if ("port" in data) and data["port"] == self.port and ("ip" in data) and data["ip"] == self.ip:

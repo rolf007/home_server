@@ -14,6 +14,9 @@ from comm import Comm
 # &#x1F984;
 # %F0%9F%A6%84
 
+def debug_print(x):
+    print(str(x).encode('unicode_escape').decode())
+
 def fuzzy_substring(needle, haystack):
     """Calculates the fuzzy match of needle in haystack,
     using a modified version of the Levenshtein distance
@@ -41,6 +44,7 @@ def fuzzy_substring(needle, haystack):
                            )
         row1 = row2
     return min(row1)
+
 class Emoji():
 
     def __init__(self):
@@ -70,7 +74,7 @@ class Emoji():
                 ret += c;
             else:
                 ret += '.' + unicodedata.name(c) + '.'
-        return (200, "received %s" % ret.encode("ascii", "ignore"))
+        return (200, "%s" % ret)
 
     # http://127.0.0.1:5004/receive?text=See this. uni.UNICORN FACE.corn. I know you liked it.
     def send(self, params):
@@ -86,7 +90,8 @@ class Emoji():
             else:
                 ret += text[i]
                 i = i + 1
-        return (200, "sent %s" % ret.encode("utf-8", "ignore"))
+        debug_print("emoji send %s" % ret)
+        return (200, "%s" % ret)
 
     def parse(self, i, text):
         h = i

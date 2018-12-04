@@ -191,7 +191,7 @@ class MusicServer():
             self.enqueue_file(filename, params)
         return ret
 
-    #http://127.0.0.1:5002/play?query=sanitarium
+    #http://127.0.0.1:5001/play?query=sanitarium
     def play(self, params):
         if "query" not in params:
             return (404, "'query' is a required argument to 'play'")
@@ -252,8 +252,8 @@ class MusicServer():
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info('ytsearch:%s' % query, ie_key='YoutubeSearch')
             e0 = info["entries"][0]
-            artist = "unknown" if "artist" not in e0 else e0["artist"].encode('ascii', 'ignore')
-            alt_title = None if "alt_title" not in e0 else e0["alt_title"].encode('ascii', 'ignore')
+            artist = "unknown" if "artist" not in e0 or e0["artist"] == None else e0["artist"].encode('ascii', 'ignore')
+            alt_title = None if "alt_title" not in e0 or e0["alt_title"] == None else e0["alt_title"].encode('ascii', 'ignore')
             if alt_title:
                 title = alt_title
             else:
@@ -279,7 +279,6 @@ music_server = MusicServer()
 try:
     while True:
         time.sleep(2.0)
-        print(".....")
 except KeyboardInterrupt:
     pass
 music_server.shut_down()
