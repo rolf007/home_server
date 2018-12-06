@@ -6,7 +6,7 @@
 #Send Sms
 # curl "https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=xxxxxxxx&to=+4526857540&Text=Test002"
 #Receive Sms:
-# curl "http://asmund.dk:5000/somepage?receivedutcdatetime=time&receivedfromphonenumber=from&receivedbyphonenumber=by&body=body"
+# curl "http://asmund.dk:5000/suresms?receivedutcdatetime=time&receivedfromphonenumber=from&receivedbyphonenumber=by&body=body"
 
 import argparse
 import json
@@ -68,12 +68,12 @@ class SmsPortal():
         if res[0] == 200:
             self.do_send_sms(phonenumber, res[1])
 
-# curl "http://asmund.dk:5100/somepage?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=body"
-# http://127.0.0.1:5100/somepage?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=p%20metallica
+# curl "http://asmund.dk:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=body"
+# http://127.0.0.1:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=p%20metallica
     def sms_received(self, path, params, ip, port):
         debug_print("sms_received: '%s(%s)' from '%s:%d'" % (path, str(params), ip, port))
-        if path != "somepage":
-            return (200, "ok, but expected path == 'somepage', got '%s'" % path)
+        if path != "suresms":
+            return (200, "ok, but expected path == 'suresms', got '%s'" % path)
         if "receivedfromphonenumber" not in params:
             return (200, "ok, but expected parameter 'receivedfromphonenumber'")
         receivedfromphonenumber = params['receivedfromphonenumber'][0]

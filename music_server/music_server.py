@@ -230,6 +230,9 @@ class MusicServer():
         self.enqueue_file(best_match["url"], params)
         return (200, "playing: '" + artist + " - " + title + "'")
 
+    def filify(self, s):
+        return s.replace(' ','_').replace('/','_')
+
     def play_youtube(self, params):
         # https://github.com/rg3/youtube-dl
         # python -m youtube_dl -x --audio-format mp3 gsoNl0MzDFA -o '%(artist)s - %(title)s.%(ext)s'
@@ -261,7 +264,7 @@ class MusicServer():
             if type(artist) == bytes: artist = artist.decode('ascii', 'ignore')
             if type(title) == bytes: title = title.decode('ascii', 'ignore')
             print("playing %s - %s" % (artist, title))
-        filename = os.path.join(home_server_root, "%s_-_%s.mp3" % ("_".join(artist.split()), "_".join(title.split())))
+        filename = os.path.join(home_server_root, "%s_-_%s.mp3" % (self.filify(artist), self.filify(title)))
         os.rename("yt.mp3", filename)
         self.enqueue_file(filename, params)
 
