@@ -6,7 +6,8 @@
 #Send Sms
 # curl "https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=xxxxxxxx&to=+4526857540&Text=Test002"
 #Receive Sms:
-# curl "http://asmund.dk:5000/suresms?receivedutcdatetime=time&receivedfromphonenumber=from&receivedbyphonenumber=by&body=body"
+# curl "http://asmund.dk:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=from&receivedbyphonenumber=by&body=body"
+# curl "http://127.0.0.1:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=+4526857540&receivedbyphonenumber=by&body=foo+.h.
 
 import argparse
 import json
@@ -15,6 +16,7 @@ import requests
 import sys
 import time
 import urllib
+import re
 
 
 home_server_root = os.path.split(sys.path[0])[0]
@@ -48,6 +50,16 @@ class SmsPortal():
                 "er": self.cmd_emoji_receive,
                 "es": self.cmd_emoji_send
                 }
+    def fixup_phone_number(self, phonenumber):
+        fixed_number = phonenumber
+        if re.match("^  [0-9]{10}$", phonenumber):
+            fixed_number = phonenumber[1:]
+        elif re.match("^[0-9]{10}$", phonenumber):
+            fixed_number = ' ' + phonenumber
+        if fixed_number != phonenumber:
+            print("fixing phone number '%s' -> '%s'" % (phonenumber, fixed_number))
+        return fixed_number
+
 
     def cmd_p(self, args, phonenumber):
         debug_print("executing p(%s)" % str(args))
@@ -88,6 +100,8 @@ class SmsPortal():
             receivedbyphonenumber = None
         else:
             receivedbyphonenumber = params['receivedbyphonenumber'][0]
+        receivedbyphonenumber = self.fixup_phone_number(receivedbyphonenumber)
+        receivedfromphonenumber = self.fixup_phone_number(receivedfromphonenumber)
 
         space = body.find(' ')
         if space == -1:
@@ -125,7 +139,7 @@ class SmsPortal():
         args = {"login": login, "password": pw, "to": to, "Text": text}
         req = "%s?%s" % (function, urllib.parse.urlencode(args, doseq=True))
         if self.args.pay:
-            print("sending sms: '%s' to '%s'" % (text, to))
+            print("sending sms: '%s' to '%s'" % (ascii(text), to))
             res = requests.get("https://api.suresms.com/%s" % req, timeout=2)
             print("res '%s'" % res)
             return (200, "sent sms!")
