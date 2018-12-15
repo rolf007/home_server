@@ -2,6 +2,7 @@
 if [ "$1" == "start" ]; then
 	screen -dmS sms_portal "sms_portal/sms_portal.py"
 	screen -dmS music_server "music_server/music_server.py"
+	screen -dmS stream_receiver "stream_receiver/stream_receiver.py"
 	screen -dmS emoji "emoji/emoji.py"
 	screen -ls
 elif [ "$1" == "stop" ]; then
