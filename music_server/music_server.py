@@ -17,6 +17,8 @@ from os.path import isfile, join
 import re
 import threading
 import youtube_dl
+from pydbus import SessionBus
+from gi.repository import GLib
 
 home_server_root = os.path.split(sys.path[0])[0]
 sys.path.append(os.path.join(home_server_root, "comm"))
@@ -174,16 +176,38 @@ class Podcaster():
             return (404, "Failed to get sound file"), None
         return (200, "Found '%d' episodes. Starting program '%s'" % (len(self.episodes), self.program_name)), filename
 
+class BashQDBus:
+    def play(self, filename):
+        subprocess.call("qdbus org.mpris.MediaPlayer2.vlc /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri \"file://%s\"" % filename, shell=True, stdout=devnull)
+
+class PyDBus:
+    def __init__(self):
+        retries = 10
+        bus = SessionBus()
+        while retries > 0:
+            retries = retries - 1
+            try:
+                self.media_player = bus.get('org.mpris.MediaPlayer2.vlc', '/org/mpris/MediaPlayer2')
+                return
+            except GLib.Error:
+                time.sleep(0.1)
+        print("ERROR, failed to create DBus")
+
+    def play(self, filename):
+        self.media_player.OpenUri("file://%s" % filename)
+
 class MusicServer():
     def __init__(self):
         self.music_collection = scan_collection()
         self.vlc_thread = VlcThread()
         self.podcaster = Podcaster()
         self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast})
+        #self.dbus = BashQDBus()
+        self.dbus = PyDBus()
 
     def enqueue_file(self, filename, params):
         print("now enqueueing! '%s'" % filename)
-        subprocess.call("qdbus org.mpris.MediaPlayer2.vlc /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri \"file://%s\"" % filename, shell=True, stdout=devnull)
+        self.dbus.play(filename)
 
     def podcast(self, params):
         ret, filename = self.podcaster.podcast(params)
