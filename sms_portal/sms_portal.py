@@ -118,7 +118,11 @@ class SmsPortal():
         elif args == "prev":
             res = self.comm.call("music_server", "podcast", {"prev": ["1"]})
         else:
-            res = self.comm.call("music_server", "podcast", {"program": [args]})
+            splt = args.split(' ')
+            if len(splt) == 1:
+                res = self.comm.call("music_server", "podcast", {"program": [splt[0]]})
+            elif len(splt) == 2:
+                res = self.comm.call("music_server", "podcast", {"program": [splt[0]], "episode": [splt[1]]})
         res = self.comm.call("stream_receiver", "multicast", {})
 
 # curl "http://asmund.dk:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=body"

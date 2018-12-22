@@ -150,8 +150,11 @@ class Podcaster():
                 self.episodes = re.findall(program_info["regex"], stdout.decode('ascii', 'ignore'))
                 self.episodes.reverse()
                 self.program_name = program_info["name"]
-                self.cur_episode = len(self.episodes) - 1
-                if len(self.episodes):
+                if "episode" in params:
+                    self.cur_episode = int(params["episode"][0])
+                else:
+                    self.cur_episode = len(self.episodes) - 1
+                if self.cur_episode >= 0 and self.cur_episode < len(self.episodes):
                     return self.download_podcast()
                 else:
                     return (404, "No episodes found"), None
