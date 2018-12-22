@@ -47,8 +47,10 @@ class SmsPortal():
             print("WARNING, you can't send SMS'es")
         self.sms_cmds = {
                 "p": self.cmd_p,
+                "py": self.cmd_py,
                 "er": self.cmd_emoji_receive,
-                "es": self.cmd_emoji_send
+                "es": self.cmd_emoji_send,
+                "ping": self.cmd_ping
                 }
     def fixup_phone_number(self, phonenumber):
         fixed_number = phonenumber
@@ -65,6 +67,11 @@ class SmsPortal():
         debug_print("executing p(%s)" % str(args))
         res = self.comm.call("music_server", "play", {"query": [args], "source": ["collection"]})
         res = self.comm.call("stream_receiver", "multicast", {})
+
+    def cmd_py(self, args, phonenumber):
+        debug_print("executing py(%s)" % str(args))
+        res = self.comm.call("music_server", "play", {"query": [args], "source": ["youtube"]})
+        res = self.comm.call("stream_receiver", "multicast", {})
         #self.do_send_sms(phonenumber, "Ok. Playing.+"+chr(129412))
 
     def cmd_emoji_receive(self, args, phonenumber):
@@ -78,6 +85,12 @@ class SmsPortal():
         debug_print("executing emoji_send(%s)" % str(args))
         res = self.comm.call("emoji", "send", {"text": [args]})
         debug_print("emoji send res: %s" % (res,))
+        if res[0] == 200:
+            self.do_send_sms(phonenumber, res[1])
+
+    def cmd_ping(self, args, phonenumber):
+        debug_print("pinging")
+        res = self.comm.call("ping_server", "status", {})
         if res[0] == 200:
             self.do_send_sms(phonenumber, res[1])
 

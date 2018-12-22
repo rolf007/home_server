@@ -5,7 +5,13 @@
 #print(unicodedata.name(chr(128514)))
 #FACE WITH TEARS OF JOY
 #emerge -av1 qdbus
+#https://wiki.python.org/moin/DbusExamples
+#pip install --user pydbus
+#pip install --user eyed3
+#pip install --user youtube_dl
 
+
+import pty
 import subprocess
 import os
 import sys
@@ -62,7 +68,12 @@ def fuzzy_substring(needle, haystack):
 class VlcThread():
     def __init__(self):
         print("starting serving music...")
-        self.p = subprocess.Popen("vlc --intf dummy --sout '#transcode{acodec=mpga,ab=128}:rtp{mux=ts,dst=239.255.12.42,sdp=sap,name=\"TestStream\"}'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.p = subprocess.Popen("vlc --intf rc --sout '#transcode{acodec=mpga,ab=128}:rtp{mux=ts,dst=239.255.12.42,sdp=sap,name=\"TestStream\"}'", shell=True, stdout=subprocess.PIPE, stdin=subprocess.PIPE, preexec_fn=os.setsid, close_fds=True)
+
+
+    def play(self, filename):
+        self.p.stdin.write(bytes('add file://%s\n' % filename, "ascii"))
+        self.p.stdin.flush()
 
     def stop(self):
         if self.p == None:
@@ -203,11 +214,12 @@ class MusicServer():
         self.podcaster = Podcaster()
         self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast})
         #self.dbus = BashQDBus()
-        self.dbus = PyDBus()
+        #self.dbus = PyDBus()
 
     def enqueue_file(self, filename, params):
         print("now enqueueing! '%s'" % filename)
-        self.dbus.play(filename)
+        #self.dbus.play(filename)
+        self.vlc_thread.play(filename)
 
     def podcast(self, params):
         ret, filename = self.podcaster.podcast(params)
