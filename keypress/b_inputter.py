@@ -1,15 +1,19 @@
 import time
 from keypress_runner import KeyPressRunner
 
-class BInputter(KeyPressRunner):
+class BInputter():
     def __init__(self):
-        super(BInputter, self).__init__()
+        self.runner = KeyPressRunner()
+
+    def set_key_press(self, key_press):
+        self.runner.set_key_press(key_press)
 
     def main_loop(self):
-        self.key_input('B', True)
-        self.key_input('b', False)
+        self.runner.key_input('B', True)
+        self.runner.key_input('b', False)
         while True:
             time.sleep(1)
 
     def shut_down(self):
         print("BInputter shut_down")
+        self.runner.shut_down()

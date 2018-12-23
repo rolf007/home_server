@@ -46,11 +46,12 @@ class Radio():
         self.go_to_main_menu()
 
     def go_to_main_menu(self):
-        self.inputter.key_press = KeyPress(self.main_menu)
+        print("going to main menu...")
+        self.inputter.set_key_press(KeyPress(self.main_menu))
 
     def go_to_morse(self):
         print("going to morse...")
-        self.inputter.key_press = KeyPress(self.morse_menu)
+        self.inputter.set_key_press(KeyPress(self.morse_menu))
         self.morse_input = ""
 
 

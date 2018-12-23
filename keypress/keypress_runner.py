@@ -2,11 +2,13 @@ from threading import Timer
 
 class KeyPressRunner:
     def __init__(self):
-        super(KeyPressRunner, self).__init__()
         self.keys = 0
         self.key_press = None
         self.timer = None
         self.relax_timer = None
+
+    def set_key_press(self, key_press):
+        self.key_press = key_press
 
     def key_input(self, c, down):
         if down:
@@ -43,3 +45,6 @@ class KeyPressRunner:
                     self.relax_timer = Timer(1, self.done_relaxing)
                     self.relax_timer.start()
 
+    def shut_down(self):
+        if self.timer: self.timer.cancel()
+        if self.relax_timer: self.relax_timer.cancel()

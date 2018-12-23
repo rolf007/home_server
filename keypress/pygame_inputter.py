@@ -1,12 +1,15 @@
 import pygame
 from keypress_runner import KeyPressRunner
 
-class PyGameInputter(KeyPressRunner):
+class PyGameInputter():
     def __init__(self):
-        super(PyGameInputter, self).__init__()
         self.running = True
+        self.runner = KeyPressRunner()
         pygame.display.init()
         pygame.display.set_mode((100,100))
+
+    def set_key_press(self, key_press):
+        self.runner.set_key_press(key_press)
 
     def main_loop(self):
         while self.running:
@@ -23,7 +26,7 @@ class PyGameInputter(KeyPressRunner):
                         c = 'C'
                     if event.key == pygame.K_d:
                         c = 'D'
-                    self.key_input(c, True)
+                    self.runner.key_input(c, True)
                 if event.type == pygame.KEYUP:
                     if event.key == pygame.K_q:
                         self.running = False
@@ -35,12 +38,11 @@ class PyGameInputter(KeyPressRunner):
                         c = 'c'
                     if event.key == pygame.K_d:
                         c = 'd'
-                    self.key_input(c, False)
+                    self.runner.key_input(c, False)
 
     def shut_down(self):
         print("==========PyGameInputter shut_down")
-        if self.timer: self.timer.cancel()
-        if self.relax_timer: self.relax_timer.cancel()
+        self.runner.shut_down()
         pygame.display.quit()
         pygame.quit(); #sys.exit() if sys is imported
 

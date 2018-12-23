@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import sys
 from keypress import KeyPress
-from raspberry_inputter import RaspberryInputter
 from pygame_inputter import PyGameInputter
 from morse_maker import MorseMaker
 from b_inputter import BInputter
@@ -32,11 +31,11 @@ class ItTest():
 
     def go_morse(self):
         print("going morse")
-        self.inputter.key_press = KeyPress(self.morseAlphbeth)
+        self.inputter.set_key_press(KeyPress(self.morseAlphbeth))
 
     def go_normal(self):
         print("going normal")
-        self.inputter.key_press = KeyPress(self.main_menu)
+        self.inputter.set_key_press(KeyPress(self.main_menu))
 
     def main_loop(self):
         self.inputter.main_loop()
