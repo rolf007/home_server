@@ -72,12 +72,12 @@ class RadioReceiver():
     def __init__(self):
         self.channels = {
                 #0: 'http://streaming.radio24syv.dk/pls/24syv_96_IR.pls',
-                0: 'http://stream.taleradio.dk/web128',
-                1: 'http://live-icy.gss.dr.dk/A/A03L.mp3.m3u',
-                2: 'http://live-icy.gss.dr.dk/A/A04L.mp3.m3u',
-                3: 'http://live-icy.gss.dr.dk/A/A05L.mp3.m3u',
+                "24syv": 'http://stream.taleradio.dk/web128',
+                "p1": 'http://live-icy.gss.dr.dk/A/A03L.mp3.m3u',
+                "p2": 'http://live-icy.gss.dr.dk/A/A04L.mp3.m3u',
+                "p3": 'http://live-icy.gss.dr.dk/A/A05L.mp3.m3u',
                 }
-        self.channel = 0
+        self.channel = "24syv"
         self.p = None
 
     def set_channel(self, channel):
