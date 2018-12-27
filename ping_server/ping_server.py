@@ -200,7 +200,7 @@ class PingServer():
                 self.ping_thread.add_alarm_onoffline(a["user"], lambda alarm: self.alarm_received(alarm, a["to"]), a["onoff"], a["weekdays"])
 
     def alarm_received(self, alarm, to):
-        res = self.comm.call("sms_portal", "send", {"text": [alarm], "to": [to]})
+        res = self.comm.call("sms_portal", "send_sms", {"text": [alarm], "to": [to]})
         print("send sms results: '%s'" % (res,))
         print("PingServer::alarm_received: %s " % alarm)
 

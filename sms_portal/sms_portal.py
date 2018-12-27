@@ -34,7 +34,7 @@ def debug_print(x):
 
 class SmsPortal():
     def __init__(self):
-        self.comm = Comm(5003, "sms_portal", {"send": self.send_sms})
+        self.comm = Comm(5003, "sms_portal", {"send_sms": self.send_sms})
         self.external_port = 5100
         self.unicast_listener = UnicastListener(self.sms_received, self.external_port)
         self.sms_password = self.load_obj("sms_password")[0]
@@ -52,7 +52,8 @@ class SmsPortal():
                 "es": self.cmd_emoji_send,
                 "ping": self.cmd_ping,
                 "radio": self.cmd_radio,
-                "pod": self.cmd_podcast
+                "pod": self.cmd_podcast,
+                "wiki": self.cmd_wiki
                 }
     def fixup_phone_number(self, phonenumber):
         fixed_number = phonenumber
@@ -64,54 +65,62 @@ class SmsPortal():
             print("fixing phone number '%s' -> '%s'" % (phonenumber, fixed_number))
         return fixed_number
 
+
 # http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=p%20metallica
 #sms: 'p metallica jump in the fire'
-    def cmd_p(self, args, phonenumber):
+    def cmd_p(self, args):
         debug_print("executing p(%s)" % str(args))
         res = self.comm.call("music_server", "play", {"query": [args], "source": ["collection"]})
         res = self.comm.call("stream_receiver", "multicast", {})
+        return None, None
 
 # http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=p%20metallica
 #sms: 'py metallica jump in the fire'
-    def cmd_py(self, args, phonenumber):
+    def cmd_py(self, args):
         debug_print("executing py(%s)" % str(args))
         res = self.comm.call("music_server", "play", {"query": [args], "source": ["youtube"]})
         res = self.comm.call("stream_receiver", "multicast", {})
-        #self.do_send_sms(phonenumber, "Ok. Playing.+"+chr(129412))
+        return None, None
 
-    def cmd_emoji_receive(self, args, phonenumber):
+    def cmd_emoji_receive(self, args):
         debug_print("executing emoji_receive(%s)" % str(args))
         res = self.comm.call("emoji", "receive", {"text": [args]})
         print(res)
         if res[0] == 200:
-            self.do_send_sms(phonenumber, res[1])
+            return res[1], False
+        return None, None
 
 #sms: 'es hello .UNICORN.'
-    def cmd_emoji_send(self, args, phonenumber):
+    def cmd_emoji_send(self, args):
         debug_print("executing emoji_send(%s)" % str(args))
         res = self.comm.call("emoji", "send", {"text": [args]})
         debug_print("emoji send res: %s" % (res,))
         if res[0] == 200:
-            self.do_send_sms(phonenumber, res[1])
+            return res[1], False
+        return None, None
 
-    def cmd_ping(self, args, phonenumber):
+#sms: 'ping'
+    def cmd_ping(self, args):
         debug_print("pinging")
         res = self.comm.call("ping_server", "status", {})
+        print("res[0]", res[0])
         if res[0] == 200:
-            self.do_send_sms(phonenumber, res[1])
+            return res[1], True
+        return None, None
 
 #web: http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=radio 24syv
 #sms: 'radio 24syv'
 #sms: 'radio p3'
-    def cmd_radio(self, args, phonenumber):
+    def cmd_radio(self, args):
         debug_print("radio")
         print(args)
         res = self.comm.call("stream_receiver", "radio", {"channel": [args]})
+        return None, None
 
 #web: http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=pod%20prev
 #sms: 'pod baelte'
 #sms: 'pod prev'
-    def cmd_podcast(self, args, phonenumber):
+    def cmd_podcast(self, args):
         debug_print("podcasting")
         if args == "next":
             res = self.comm.call("music_server", "podcast", {"next": ["1"]})
@@ -124,6 +133,14 @@ class SmsPortal():
             elif len(splt) == 2:
                 res = self.comm.call("music_server", "podcast", {"program": [splt[0]], "episode": [splt[1]]})
         res = self.comm.call("stream_receiver", "multicast", {})
+        return None, None
+
+#web: http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=wiki%20greta%20thunberg
+    def cmd_wiki(self, args):
+        res = self.comm.call("wiki", "wiki", {"query": [args]})
+        if res[0] == 200:
+            return res[1], True
+        return None, None
 
 # curl "http://asmund.dk:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=body"
     def sms_received(self, path, params, ip, port):
@@ -155,12 +172,33 @@ class SmsPortal():
             cmd = body[:space]
             args = body[space+1:]
 
+        args, mobile = self.parse_mobile_arg(args, "m", "1")
+        mobile = int(mobile)
         if cmd in self.sms_cmds:
-            self.sms_cmds[cmd](args, receivedfromphonenumber)
+            return_sms, tail = self.sms_cmds[cmd](args)
+            if return_sms != None:
+                self.do_send_sms(receivedfromphonenumber, return_sms, mobile, tail)
         else:
-            print("Unknown command '%s', called with args '%s'" % (cmd, args))
+            err = "Unknown command '%s', called with args '%s'" % (cmd, args)
+            self.do_send_sms(receivedfromphonenumber, err, 1, False)
+            print(err)
 
         return (200, "sms handled ok")
+
+    def parse_mobile_arg(self, args, arg_name, default_value = "1"):
+        value = default_value
+        s = re.search("^(?:(.*)\s)?\.%s([0-9]?)(?:\s(.*))?$" % arg_name, args)
+        if s:
+            value = s[2]
+            if s[1] and s[3]:
+                args = s[1] + " " + s[3]
+            elif s[1]:
+                args = s[1]
+            elif s[3]:
+                args = s[3]
+            else:
+                args = ""
+        return args, value
 
     def load_obj(self, name):
         with open(os.path.join(home_server_config, name + '.json'), 'rb') as f:
@@ -174,9 +212,13 @@ class SmsPortal():
             return (404, "sending sms requires a 'to'")
         text = params["text"][0]
         to = params["to"][0]
-        return self.do_send_sms(to, text)
+        return self.do_send_sms(to, text, 1, False)
 
-    def do_send_sms(self, to, text):
+    def do_send_sms(self, to, text, mobile, tail):
+        if tail:
+            text = text[-120*mobile:]
+        else:
+            text = text[:120*mobile]
         login = "Rolf"
         pw = self.sms_password
         function = "Script/SendSMS.aspx"
