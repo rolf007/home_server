@@ -4,6 +4,7 @@ import copy
 import itertools
 import sys
 
+#epsilon state
 class EState:
     def __init__(self):
         self.estates = []
@@ -15,6 +16,7 @@ class EState:
             return self.estates
         return []
 
+#callback state
 class CState:
     def __init__(self, next_state, l):
         self.next_state = next_state
@@ -26,6 +28,7 @@ class CState:
             return [self.next_state]
         return []
 
+#char state
 class State:
     def __init__(self, char, next_state):
         self.char = char
@@ -41,6 +44,7 @@ class State:
         else:
             return []
 
+#time state
 class TState:
     def __init__(self, min_time, max_time, next_state):
         self.min_time = min_time
@@ -59,6 +63,7 @@ class TState:
         else:
             return []
 
+#any time state
 class AState:
     def __init__(self, next_state):
         self.next_state = next_state
@@ -104,9 +109,13 @@ class KeyPress:
         self.states = new_states
         self.resolve_estates()
         times = set()
+        chars = set()
         for state in self.states:
             if isinstance(state, TState):
                 times.update([state.min_time, state.max_time])
+            if isinstance(state, State):
+                chars.update([state.char])
+        print("chars = %s" % chars)
         return times
 
     def resolve_estates(self):
