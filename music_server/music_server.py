@@ -4,35 +4,24 @@
 #import unicodedata
 #print(unicodedata.name(chr(128514)))
 #FACE WITH TEARS OF JOY
-#emerge -av1 qdbus
-#https://wiki.python.org/moin/DbusExamples
-#pip install --user pydbus
 #pip install --user eyed3
 #pip install --user youtube_dl
 
 
-import pty
 import subprocess
 import os
 import sys
 import eyed3
-from time import strftime, localtime, sleep
 import time
 from os import listdir
 from os.path import isfile, join
 import re
-import threading
 import youtube_dl
-from pydbus import SessionBus
-from gi.repository import GLib
 
 home_server_root = os.path.split(sys.path[0])[0]
+home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
 from comm import Comm
-
-import logging
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
 
 devnull = open(os.devnull, 'w')
 
@@ -68,14 +57,20 @@ def fuzzy_substring(needle, haystack):
 class VlcThread():
     def __init__(self):
         print("starting serving music...")
+        self.filename = None
         self.p = subprocess.Popen("vlc --intf rc --sout '#transcode{acodec=mpga,ab=128}:rtp{mux=ts,dst=239.255.12.42,sdp=sap,name=\"TestStream\"}'", shell=True, stdout=subprocess.PIPE, stdin=subprocess.PIPE, preexec_fn=os.setsid, close_fds=True)
 
 
     def play(self, filename):
+        self.filename = filename
         self.p.stdin.write(bytes('add file://%s\n' % filename, "ascii"))
         self.p.stdin.flush()
 
+    def get_current_file(self):
+        return self.filename
+
     def stop(self):
+        self.filename = None
         if self.p == None:
             return
         print("stopping serving music...")
@@ -93,8 +88,6 @@ def scan_collection():
             print("found : %s - %s (%s)" % ( audiofile.tag.artist, audiofile.tag.title, url))
             music_collection.append({"title":audiofile.tag.title, "artist":audiofile.tag.artist, "url":url})
     return music_collection
-
-
 
 
 class MyLogger(object):
@@ -190,38 +183,17 @@ class Podcaster():
             return (404, "Failed to get sound file"), None
         return (200, "Found '%d' episodes. Starting program '%s'" % (len(self.episodes), self.program_name)), filename
 
-class BashQDBus:
-    def play(self, filename):
-        subprocess.call("qdbus org.mpris.MediaPlayer2.vlc /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.OpenUri \"file://%s\"" % filename, shell=True, stdout=devnull)
-
-class PyDBus:
-    def __init__(self):
-        retries = 10
-        bus = SessionBus()
-        while retries > 0:
-            retries = retries - 1
-            try:
-                self.media_player = bus.get('org.mpris.MediaPlayer2.vlc', '/org/mpris/MediaPlayer2')
-                return
-            except GLib.Error:
-                time.sleep(0.1)
-        print("ERROR, failed to create DBus")
-
-    def play(self, filename):
-        self.media_player.OpenUri("file://%s" % filename)
 
 class MusicServer():
     def __init__(self):
         self.music_collection = scan_collection()
+        print("music_collection = '%s'" % self.music_collection)
         self.vlc_thread = VlcThread()
         self.podcaster = Podcaster()
-        self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast})
-        #self.dbus = BashQDBus()
-        #self.dbus = PyDBus()
+        self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast, "tag": self.tag})
 
     def enqueue_file(self, filename, params):
         print("now enqueueing! '%s'" % filename)
-        #self.dbus.play(filename)
         self.vlc_thread.play(filename)
 
     def podcast(self, params):
@@ -230,7 +202,23 @@ class MusicServer():
             self.enqueue_file(filename, params)
         return ret
 
-    #http://127.0.0.1:5001/play?query=sanitarium
+#http://127.0.0.1:5001/tag?star=5
+#http://127.0.0.1:5001/tag?instrumetal=1
+#http://127.0.0.1:5001/tag?christmas=1
+    def tag(self, params):
+        print("tagging '%s'" % params)
+        filename = self.vlc_thread.get_current_file()
+        if filename == None:
+            return (404, "nothing to tag")
+        print("tagging '%s' with '%s'" % (filename, params))
+        if not os.path.exists(home_server_config):
+            os.mkdir(home_server_config)
+        with open(os.path.join(home_server_config, "custom_tags.txt"), 'a+') as f:
+            for key, value in params.items():
+                f.write('"%s": {"%s": "%s"},\n' % (filename, key, value[0]))
+        return (200, "tagging ok")
+
+#http://127.0.0.1:5001/play?query=sanitarium
     def play(self, params):
         if "query" not in params:
             return (404, "'query' is a required argument to 'play'")
@@ -308,7 +296,6 @@ class MusicServer():
         self.enqueue_file(filename, params)
 
         return (200, "playing %s - %s" % (artist, title))
-
 
 
     def shut_down(self):

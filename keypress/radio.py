@@ -1,19 +1,12 @@
-#!/usr/bin/env python3
 import os
 import sys
-import subprocess
 
 home_server_root = os.path.split(sys.path[0])[0]
 sys.path.append(os.path.join(home_server_root, "comm"))
 from comm import Comm
 sys.path.append(os.path.join(home_server_root, "keypress"))
-from pygame_inputter import PyGameInputter
-from raspberry_inputter import RaspberryInputter
-from b_inputter import BInputter
 from keypress import KeyPress
 from morse_maker import MorseMaker
-
-devnull = open(os.devnull, 'w')
 
 class Radio():
     def __init__(self, inputter):
@@ -121,12 +114,3 @@ class Radio():
     def shut_down(self):
         self.comm.shut_down()
         self.inputter.shut_down()
-
-inputter = PyGameInputter()
-
-radio = Radio(inputter)
-try:
-    radio.main_loop()
-except KeyboardInterrupt:
-    pass
-radio.shut_down()
