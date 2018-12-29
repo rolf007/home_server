@@ -136,10 +136,9 @@ class PingThread(threading.Thread):
         return amount
 
 
-
     def get_log(self, user, day=None):
         for ip in self.ip_list:
-            if ip["user"] == user:
+            if ip["user"].lower() == user.lower():
                 if ip["log_end"] == None:
                     return []
                 full_log = ip["log"]
@@ -164,11 +163,11 @@ class PingThread(threading.Thread):
                 mlog += '-'
             mlog += "%d:%02d" % (entry[0].tm_hour, entry[0].tm_min)
         for ip in self.ip_list:
-            if ip["user"] == user:
+            if ip["user"].lower() == user.lower():
                 mlog += "\n=%d" % self.calc_amount(ip, day)
         return mlog[1:]
 
-    def m_get_status(self):
+    def get_status(self):
         mstatus = ""
         for ip in self.ip_list:
             if ip["online"]:
@@ -183,7 +182,6 @@ class PingThread(threading.Thread):
         self.join()
 
 class PingServer():
-
     def __init__(self):
         ip_list = self.load_obj("ip_list")
         alarms = self.load_obj("alarms")
@@ -209,9 +207,7 @@ class PingServer():
             return json.load(f)
 
     def status(self, params):
-        status = self.ping_thread.m_get_status()
-        if "m" in params:
-            status = status[-120:]
+        status = self.ping_thread.get_status()
         return (200, status)
 
     def log(self, params):
@@ -219,8 +215,6 @@ class PingServer():
             return (404, "function 'log' requires 'user'")
         user = params["user"][0]
         log = self.ping_thread.m_get_log(user)
-        if "m" in params:
-            log = log[-120:]
         return (200, log)
 
     def reset(self, params):
@@ -230,7 +224,6 @@ class PingServer():
     def shut_down(self):
         self.ping_thread.shut_down()
         self.comm.shut_down()
-
 
 
 if __name__ == '__main__':

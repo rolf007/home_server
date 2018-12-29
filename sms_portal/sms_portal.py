@@ -51,6 +51,7 @@ class SmsPortal():
                 "er": self.cmd_emoji_receive,
                 "es": self.cmd_emoji_send,
                 "ping": self.cmd_ping,
+                "pinglog": self.cmd_pinglog,
                 "radio": self.cmd_radio,
                 "pod": self.cmd_podcast,
                 "wiki": self.cmd_wiki
@@ -103,10 +104,19 @@ class SmsPortal():
     def cmd_ping(self, args):
         debug_print("pinging")
         res = self.comm.call("ping_server", "status", {})
-        print("res[0]", res[0])
         if res[0] == 200:
             return res[1], True
         return None, None
+
+# http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=pinglog%20SG
+#sms: 'pinglog SG'
+    def cmd_pinglog(self, args):
+        debug_print("ping log %s" % args)
+        res = self.comm.call("ping_server", "log", {"user": [args]})
+        if res[0] == 200:
+            return res[1], True
+        return None, None
+
 
 #web: http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=radio 24syv
 #sms: 'radio 24syv'
