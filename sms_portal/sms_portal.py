@@ -139,7 +139,7 @@ class SmsPortal():
     def cmd_wiki(self, args):
         res = self.comm.call("wiki", "wiki", {"query": [args]})
         if res[0] == 200:
-            return res[1], True
+            return res[1], False
         return None, None
 
 # curl "http://asmund.dk:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=body"
