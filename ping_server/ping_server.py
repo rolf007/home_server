@@ -207,6 +207,7 @@ class PingServer():
             return json.load(f)
 
     def status(self, params):
+        # TODO report how long time since last seen
         status = self.ping_thread.get_status()
         return (200, status)
 

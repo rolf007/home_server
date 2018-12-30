@@ -12,6 +12,7 @@ import subprocess
 import os
 import sys
 import eyed3
+import json
 import time
 from os import listdir
 from os.path import isfile, join
@@ -78,15 +79,18 @@ class VlcThread():
         print(self.p.communicate())
         self.p = None
 
-def scan_collection():
-    music_collection = []
-    mypath = "/home/rolf/sfx"
-    urls = [os.path.join(mypath, f) for f in listdir(mypath) if isfile(join(mypath, f)) and f.endswith(".mp3")]
-    for url in urls:
-        audiofile = eyed3.load(url)
-        if audiofile.tag:
-            print("found : %s - %s (%s)" % ( audiofile.tag.artist, audiofile.tag.title, url))
-            music_collection.append({"title":audiofile.tag.title, "artist":audiofile.tag.artist, "url":url})
+
+def load_collection():
+    collection_path = os.path.join(home_server_config, "collections")
+    music_collection = {}
+
+    directory = os.fsencode(collection_path)
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith(b'.json'):
+                full_path = os.path.join(root, file)
+                with open(full_path) as f:
+                    music_collection = {**music_collection, **json.load(f)}
     return music_collection
 
 
@@ -186,7 +190,7 @@ class Podcaster():
 
 class MusicServer():
     def __init__(self):
-        self.music_collection = scan_collection()
+        self.music_collection = load_collection()
         print("music_collection = '%s'" % self.music_collection)
         self.vlc_thread = VlcThread()
         self.podcaster = Podcaster()
