@@ -19,6 +19,8 @@ from os.path import isfile, join
 import re
 import youtube_dl
 
+from mkdirp import mkdirp
+
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
@@ -175,16 +177,18 @@ class Podcaster():
             return (404, "Unknown podcast query: '%s'" % params), None
 
     def download_podcast(self):
-        filename = os.path.join(home_server_root, "%s_-_episode_%d" % (self.program_name, self.cur_episode))
+        podcast_path = os.path.join(home_server_config, "podcast")
+        mkdirp(podcast_path)
+        filename = os.path.join(podcast_path, "%s_-_episode_%d" % (self.program_name, self.cur_episode))
         if os.path.isfile(filename):
             print("File '%s' already exists" % filename)
-            return (200, "Found '%d' episodes. Starting program '%s'" % (len(self.episodes), self.program_name)), filename
-        print("downloading '%s' -> '%s'" % (self.episodes[self.cur_episode], filename))
-        p = subprocess.Popen("wget \"%s\" -O %s" % (self.episodes[self.cur_episode], filename), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = p.communicate()
-        print("downloading done!")
-        if p.returncode != 0:
-            return (404, "Failed to get sound file"), None
+        else:
+            print("downloading '%s' -> '%s'" % (self.episodes[self.cur_episode], filename))
+            p = subprocess.Popen("wget \"%s\" -O %s" % (self.episodes[self.cur_episode], filename), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = p.communicate()
+            print("downloading done!")
+            if p.returncode != 0:
+                return (404, "Failed to get sound file"), None
         return (200, "Found '%d' episodes. Starting program '%s'" % (len(self.episodes), self.program_name)), filename
 
 
@@ -200,6 +204,9 @@ class MusicServer():
         print("now enqueueing! '%s'" % filename)
         self.vlc_thread.play(filename)
 
+#http://127.0.0.1:5001/podcast?program=d6m&episode=4
+#http://127.0.0.1:5001/podcast?program=d6m
+#http://127.0.0.1:5001/podcast?next=1
     def podcast(self, params):
         ret, filename = self.podcaster.podcast(params)
         if filename:
@@ -223,6 +230,7 @@ class MusicServer():
         return (200, "tagging ok")
 
 #http://127.0.0.1:5001/play?query=sanitarium
+#http://127.0.0.1:5001/play?source=youtube&query=sanitarium
     def play(self, params):
         if "query" not in params:
             return (404, "'query' is a required argument to 'play'")
@@ -279,7 +287,7 @@ class MusicServer():
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
-            'outtmpl': 'yt.%(ext)s',
+            'outtmpl': '/tmp/yt.%(ext)s',
             'logger': MyLogger(),
             'progress_hooks': [my_hook],
         }
@@ -295,8 +303,10 @@ class MusicServer():
             if type(artist) == bytes: artist = artist.decode('ascii', 'ignore')
             if type(title) == bytes: title = title.decode('ascii', 'ignore')
             print("playing %s - %s" % (artist, title))
-        filename = os.path.join(home_server_root, "%s_-_%s.mp3" % (self.filify(artist), self.filify(title)))
-        os.rename("yt.mp3", filename)
+        youtube_path = os.path.join(home_server_config, "youtube")
+        mkdirp(youtube_path)
+        filename = os.path.join(youtube_path, "%s_-_%s.mp3" % (self.filify(artist), self.filify(title)))
+        os.rename("/tmp/yt.mp3", filename)
         self.enqueue_file(filename, params)
 
         return (200, "playing %s - %s" % (artist, title))

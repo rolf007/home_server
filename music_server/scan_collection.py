@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import errno
 import eyed3
 import json
 from os import listdir
@@ -9,6 +8,8 @@ from os.path import isfile, join
 import os
 import subprocess
 import sys
+
+from mkdirp import mkdirp
 
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
@@ -44,11 +45,7 @@ collection = scan_collection(scan_path)
 filename = scan_path[1:].replace('/', '_') + ".json"
 print("filename", filename)
 collection_path = os.path.join(home_server_config, "collections")
-try:
-    os.makedirs(collection_path)
-except OSError as e:
-    if e.errno != errno.EEXIST:
-        raise
+mkdirp(collection_path)
 abs_filename = os.path.join(collection_path, filename)
 with open(abs_filename, 'w') as f:
     json.dump(collection, f)
