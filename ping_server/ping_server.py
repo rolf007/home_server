@@ -168,12 +168,30 @@ class PingThread(threading.Thread):
         return mlog[1:]
 
     def get_status(self):
+        #Alpha 23      Alpha online 23 minutes today. Currently online.
+        #(Beta 12) 27  Beta online 27 minutes today. Last seen 12 minutes ago.
+        #              Gamma not seen today.
         mstatus = ""
         for ip in self.ip_list:
-            if ip["online"]:
+            online = ip["online"]
+            if online:
                 if mstatus != "":
-                    mstatus += ", "
+                    mstatus += "\n"
                 mstatus += "%s %d" % (ip["user"], self.calc_amount(ip))
+            else:
+                has_online_entry = False
+                for entry in ip["log"]:
+                    today = ip["log_end"]
+                    is_today = (today.tm_year == entry[0].tm_year and today.tm_mon == entry[0].tm_mon and today.tm_mday == entry[0].tm_mday)
+                    if entry[1] == True and is_today:
+                        for rentry in reversed(ip["log"]):
+                            if rentry[1] == False:
+                                time_since_last_online = (ip["log_end"].tm_hour - rentry[0].tm_hour)*60 + (ip["log_end"].tm_min - rentry[0].tm_min)
+                                if mstatus != "":
+                                    mstatus += "\n"
+                                mstatus += "(%s %d) %d" % (ip["user"], time_since_last_online, self.calc_amount(ip))
+                                break
+                        break
         return mstatus
 
     def shut_down(self):
@@ -186,7 +204,7 @@ class PingServer():
         ip_list = self.load_obj("ip_list")
         alarms = self.load_obj("alarms")
         self.comm = Comm(5002, "ping_server", {"status": self.status, "log": self.log, "reset": self.reset})
-        self.ping_thread = PingThread(3, None)
+        self.ping_thread = PingThread(60, None)
         for ip in ip_list:
             self.ping_thread.add_ip(ip["name"], ip["ip"])
         for a in alarms:
@@ -206,8 +224,8 @@ class PingServer():
         with open(os.path.join(home_server_config, name + '.json'), 'rb') as f:
             return json.load(f)
 
+#http://127.0.0.1:5002/status
     def status(self, params):
-        # TODO report how long time since last seen
         status = self.ping_thread.get_status()
         return (200, status)
 

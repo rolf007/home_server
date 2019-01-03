@@ -112,12 +112,12 @@ class TestPingThread(unittest.TestCase):
         self.assertEqual("+4:00-5:00\n+6:00\n=105", self.ping_thread.m_get_log("S"))
         self.assertEqual("+0:00-5:00\n+6:00-6:30\n=330", self.ping_thread.m_get_log("C"))
 
-    def test_m_get_status(self):
-        self.assertEqual("", self.ping_thread.m_get_status())
+    def test_get_status(self):
+        self.assertEqual("", self.ping_thread.get_status())
         self.ping_thread.add_ip("S", "10.0.0.1")
         self.ping_thread.add_ip("C", "10.0.0.2")
         self.ping_thread.add_ip("A", "10.0.0.3")
-        self.assertEqual("", self.ping_thread.m_get_status())
+        self.assertEqual("", self.ping_thread.get_status())
         self.do_something(2012, 1, 1, 0, 0, 1)
         self.online = {"10.0.0.1"}
         self.do_something(2012, 1, 1, 0, 1, 1)
@@ -125,10 +125,15 @@ class TestPingThread(unittest.TestCase):
         self.online = {"10.0.0.1", "10.0.0.2"}
         self.do_something(2012, 1, 1, 0, 3, 1)
         self.do_something(2012, 1, 1, 0, 4, 1)
-        self.assertEqual("S 3, C 1", self.ping_thread.m_get_status())
+        self.assertEqual("S 3\nC 1", self.ping_thread.get_status())
         self.online = {"10.0.0.2"}
         self.do_something(2012, 1, 1, 0, 5, 1)
-        self.assertEqual("C 2", self.ping_thread.m_get_status())
+        self.do_something(2012, 1, 1, 0, 6, 1)
+        self.assertEqual("(S 1) 4\nC 3", self.ping_thread.get_status())
+        self.do_something(2012, 1, 1, 0, 7, 1)
+        self.assertEqual("(S 2) 4\nC 4", self.ping_thread.get_status())
+        self.do_something(2012, 1, 2, 0, 7, 1)
+        self.assertEqual("C 7", self.ping_thread.get_status())
 
 if __name__ == '__main__':
     unittest.main()
