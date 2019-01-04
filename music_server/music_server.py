@@ -296,7 +296,7 @@ class MusicServer():
             if not title:
                 continue
             score = fuzzy_substring(query.lower(), title.lower())
-            print("score = %s (%s)" % (score, title))
+            #print("score = %s (%s)" % (score, title))
             if score < best_score or best_score == -1.0:
                 best_score = score
                 best_match = music
@@ -313,7 +313,23 @@ class MusicServer():
         return (200, "playing: '" + artist + " - " + title + "'")
 
     def filify(self, s):
-        return s.replace(' ','_').replace('/','_')
+        table = {32: '_',
+                 47: '_',
+                 197: 'Aa',
+                 198: 'Ae',
+                 216: 'Oe',
+                 229: 'aa',
+                 230: 'ae',
+                 248: 'oe'}
+
+        ret = ""
+        for c in s:
+            o = ord(c)
+            if o in table:
+                ret += table[o]
+            elif o >= 32 and o <= 126:
+                ret += c
+        return ret
 
     def play_youtube(self, params):
         # https://github.com/rg3/youtube-dl
@@ -337,22 +353,24 @@ class MusicServer():
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info('ytsearch:%s' % query, ie_key='YoutubeSearch')
             e0 = info["entries"][0]
-            artist = "unknown" if "artist" not in e0 or e0["artist"] == None else e0["artist"].encode('ascii', 'ignore')
-            alt_title = None if "alt_title" not in e0 or e0["alt_title"] == None else e0["alt_title"].encode('ascii', 'ignore')
+            artist = None if "artist" not in e0 or e0["artist"] == None else e0["artist"]
+            alt_title = None if "alt_title" not in e0 or e0["alt_title"] == None else e0["alt_title"]
             if alt_title:
                 title = alt_title
             else:
                 title = "unknown" if "title" not in e0 else e0["title"]
-            if type(artist) == bytes: artist = artist.decode('ascii', 'ignore')
-            if type(title) == bytes: title = title.decode('ascii', 'ignore')
-            print("playing %s - %s" % (artist, title))
         youtube_path = os.path.join(home_server_config, "youtube")
         mkdirp(youtube_path)
-        filename = os.path.join(youtube_path, "%s_-_%s.mp3" % (self.filify(artist), self.filify(title)))
+        if artist:
+            name = "%s_-_%s.mp3" % (self.filify(artist), self.filify(title))
+        else:
+            name = "%s.mp3" % self.filify(title)
+        filename = os.path.join(youtube_path, name)
         os.rename("/tmp/yt.mp3", filename)
         self.enqueue_file(filename, params)
+        print("playing %s" % name)
 
-        return (200, "playing %s - %s" % (artist, title))
+        return (200, "playing name %s" % name)
 
 
     def shut_down(self):
