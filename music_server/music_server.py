@@ -24,6 +24,7 @@ import re
 import youtube_dl
 
 from mkdirp import mkdirp
+from filify import filify
 
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
@@ -312,25 +313,6 @@ class MusicServer():
         self.enqueue_file(best_url, params)
         return (200, "playing: '" + artist + " - " + title + "'")
 
-    def filify(self, s):
-        table = {32: '_',
-                 47: '_',
-                 197: 'Aa',
-                 198: 'Ae',
-                 216: 'Oe',
-                 229: 'aa',
-                 230: 'ae',
-                 248: 'oe'}
-
-        ret = ""
-        for c in s:
-            o = ord(c)
-            if o in table:
-                ret += table[o]
-            elif o >= 32 and o <= 126:
-                ret += c
-        return ret
-
     def play_youtube(self, params):
         # https://github.com/rg3/youtube-dl
         # python -m youtube_dl -x --audio-format mp3 gsoNl0MzDFA -o '%(artist)s - %(title)s.%(ext)s'
@@ -362,9 +344,9 @@ class MusicServer():
         youtube_path = os.path.join(home_server_config, "youtube")
         mkdirp(youtube_path)
         if artist:
-            name = "%s_-_%s.mp3" % (self.filify(artist), self.filify(title))
+            name = "%s_-_%s.mp3" % (filify(artist), filify(title))
         else:
-            name = "%s.mp3" % self.filify(title)
+            name = "%s.mp3" % filify(title)
         filename = os.path.join(youtube_path, name)
         os.rename("/tmp/yt.mp3", filename)
         self.enqueue_file(filename, params)
