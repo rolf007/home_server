@@ -23,8 +23,8 @@ def scan_collection(scan_path):
                 url = os.path.join(root, file).decode('ascii')
 
                 audiofile = eyed3.load(url)
-                if audiofile.tag:
-                    print("found : %s - %s (%s)" % ( audiofile.tag.artist, audiofile.tag.title, url))
+                if audiofile and audiofile.tag:
+                    print("found : %s - %s (%s)" % ( ascii(audiofile.tag.artist), ascii(audiofile.tag.title), url))
                     music_collection[url] = {"title":audiofile.tag.title, "artist":audiofile.tag.artist}
     return music_collection
 
@@ -50,4 +50,4 @@ abs_filename = os.path.join(collection_path, filename)
 with open(abs_filename, 'w') as f:
     json.dump(collection, f)
 #make the collection file more human readable:
-subprocess.check_output("sed -i -e 's/},/},\\n/g' %s" % abs_filename, shell=True)
+subprocess.check_output("sed -i -e 's/},/},\\n/g' \"%s\"" % abs_filename, shell=True)

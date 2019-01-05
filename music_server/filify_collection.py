@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 
 import argparse
-from os.path import join
+from filify import filify
 import os
 
 def filify_collection(scan_path):
     music_collection = {}
     directory = os.fsencode(scan_path)
     for root, dirs, files in os.walk(directory):
+        for dir in dirs:
+            f = bytes(filify(dir), 'ascii')
+            if f != dir:
+                print("rename dir  %s / %s ->\n            %s / %s" % (root, ascii(dir), root, f))
+                os.rename(os.path.join(root, dir), os.path.join(root, f))
         for file in files:
-            if file.endswith(b'.mp3'):
-                print(os.path.join(root, file))
-                url = os.path.join(root, file).decode('ascii')
-                print(url)
-                print()
+            f = bytes(filify(file), 'ascii')
+            if f != file:
+                print("rename file %s / %s ->\n            %s / %s" % (root, ascii(file), root, f))
+                os.rename(os.path.join(root, file), os.path.join(root, f))
 
 
 

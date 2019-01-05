@@ -234,8 +234,9 @@ class Podcaster():
 
 class MusicServer():
     def __init__(self):
+        print("loading music collection...")
         self.music_collection = load_collection()
-        print("music_collection = '%s'" % self.music_collection)
+        print("music collection loaded!")
         self.vlc_thread = VlcThread()
         print("...")
         self.podcaster = Podcaster()
