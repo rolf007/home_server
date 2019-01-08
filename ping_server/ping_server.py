@@ -11,7 +11,9 @@ import time
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
+sys.path.append(os.path.join(home_server_root, "logger"))
 from comm import Comm
+from logger import Logger
 
 devnull = open(os.devnull, 'w')
 
@@ -203,7 +205,9 @@ class PingServer():
     def __init__(self):
         ip_list = self.load_obj("ip_list")
         alarms = self.load_obj("alarms")
-        self.comm = Comm(5002, "ping_server", {"status": self.status, "log": self.log, "reset": self.reset})
+        self.logger = Logger("ping_server")
+        self.logger.log("Started ping server")
+        self.comm = Comm(5002, "ping_server", {"status": self.status, "log": self.log, "reset": self.reset}, self.logger)
         self.ping_thread = PingThread(60, None)
         for ip in ip_list:
             self.ping_thread.add_ip(ip["name"], ip["ip"])

@@ -6,13 +6,17 @@ import time
 
 home_server_root = os.path.split(sys.path[0])[0]
 sys.path.append(os.path.join(home_server_root, "comm"))
+sys.path.append(os.path.join(home_server_root, "logger"))
 from comm import Comm
+from logger import Logger
 
 devnull = open(os.devnull, 'w')
 
 class StreamReceiver():
     def __init__(self):
-        self.comm = Comm(5005, "stream_receiver", {"multicast": self.multicast, "radio": self.radio})
+        self.logger = Logger("streamer")
+        self.logger.log("started streamer")
+        self.comm = Comm(5005, "stream_receiver", {"multicast": self.multicast, "radio": self.radio}, self.logger)
         self.radio = RadioReceiver()
         self.multicast_receiver = MulticastReceiver()
         self.running = True

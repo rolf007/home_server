@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 
 #https://wiki.videolan.org/Documentation:Streaming_HowTo/Advanced_Streaming_Using_the_Command_Line/#Examples
-#import unicodedata
-#print(unicodedata.name(chr(128514)))
-#FACE WITH TEARS OF JOY
 #/etc/portage/package.use/vlc:
 #media-video/vlc lua
 #pip install --user eyed3
@@ -23,48 +20,22 @@ import pty
 import re
 import youtube_dl
 
-from mkdirp import mkdirp
-from filify import filify
 
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
+sys.path.append(os.path.join(home_server_root, "logger"))
+sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
-
-devnull = open(os.devnull, 'w')
-
-def fuzzy_substring(needle, haystack):
-    """Calculates the fuzzy match of needle in haystack,
-    using a modified version of the Levenshtein distance
-    algorithm.
-    The function is modified from the levenshtein function
-    in the bktree module by Adam Hupp"""
-
-    m, n = len(needle), len(haystack)
-
-    # base cases
-    if m == 1:
-        return not needle in haystack
-    if not n:
-        return m
-
-    row1 = [0] * (n+1)
-    for i in range(0,m):
-        row2 = [i+1]
-        for j in range(0,n):
-            cost = ( needle[i] != haystack[j] )
-
-            row2.append( min(row1[j+1]+1, # deletion
-                               row2[j]+1, #insertion
-                               row1[j]+cost) #substitution
-                           )
-        row1 = row2
-    return min(row1)
-
+from logger import Logger
+from mkdirp import mkdirp
+from filify import filify
+from fuzzy_substring import fuzzy_substring
 
 class VlcThread():
-    def __init__(self):
-        print("starting serving music...")
+    def __init__(self, logger):
+        self.logger = logger
+        self.logger.log("VLC: started serving music")
         master, slave = pty.openpty()
         self.p = subprocess.Popen("vlc --intf rc --sout '#transcode{acodec=mpga,ab=128}:rtp{mux=ts,dst=239.255.12.42,sdp=sap,name=\"TestStream\"}'", shell=True, stdout=slave, stdin=subprocess.PIPE, preexec_fn=os.setsid, close_fds=True, bufsize=0)
         self.stdout = os.fdopen(master)
@@ -234,13 +205,13 @@ class Podcaster():
 
 class MusicServer():
     def __init__(self):
-        print("loading music collection...")
+        self.logger = Logger("music_server")
+        self.logger.log("loading music collection...")
         self.music_collection = load_collection()
-        print("music collection loaded!")
-        self.vlc_thread = VlcThread()
-        print("...")
+        self.logger.log("music collection loaded %d tracks" % len(self.music_collection))
+        self.vlc_thread = VlcThread(self.logger)
         self.podcaster = Podcaster()
-        self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast, "tag": self.tag})
+        self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast, "tag": self.tag}, self.logger)
 
     def enqueue_file(self, filename, params):
         print("now enqueueing! '%s'" % filename)
@@ -308,9 +279,9 @@ class MusicServer():
         artist = "unknown" if "artist" not in best_match else best_match["artist"]
         title = "unknown" if "title" not in best_match else best_match["title"]
         url = best_url
-        print("artist: '%s'" % artist)
-        print("title: '%s'" % title)
-        print("url: '%s'" % url)
+        self.logger.log("artist: '%s'" % artist)
+        self.logger.log("title: '%s'" % title)
+        self.logger.log("url: '%s'" % url)
         self.enqueue_file(best_url, params)
         return (200, "playing: '" + artist + " - " + title + "'")
 

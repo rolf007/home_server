@@ -8,14 +8,18 @@ import time
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
+sys.path.append(os.path.join(home_server_root, "logger"))
+sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
+from logger import Logger
+from fuzzy_substring import fuzzy_substring
+#import unicodedata
+#print(unicodedata.name(chr(128514)))
+#FACE WITH TEARS OF JOY
 # UNICODE FACE
 # &#129412;
 # &#x1F984;
 # %F0%9F%A6%84
-
-def debug_print(x):
-    print(str(x).encode('unicode_escape').decode())
 
 def fuzzy_substring(needle, haystack):
     """Calculates the fuzzy match of needle in haystack,
@@ -48,7 +52,9 @@ def fuzzy_substring(needle, haystack):
 class Emoji():
 
     def __init__(self):
-        self.comm = Comm(5004, "emoji", {"receive": self.receive, "send": self.send})
+        self.logger = Logger("emoji")
+        self.logger.log("Started emoji")
+        self.comm = Comm(5004, "emoji", {"receive": self.receive, "send": self.send}, self.logger)
         self.blocks = [
             #(0x13000, 0x1342F, "Egyptian Hieroglyphs"),
             (0x1F300, 0x1F600, "Miscellaneous Symbols and Pictographs"),
@@ -90,7 +96,7 @@ class Emoji():
             else:
                 ret += text[i]
                 i = i + 1
-        debug_print("emoji send %s" % ret)
+        self.logger.log("emoji send %s" % ret)
         return (200, "%s" % ret)
 
     def parse(self, i, text):

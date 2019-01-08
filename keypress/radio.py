@@ -3,14 +3,18 @@ import sys
 
 home_server_root = os.path.split(sys.path[0])[0]
 sys.path.append(os.path.join(home_server_root, "comm"))
-from comm import Comm
 sys.path.append(os.path.join(home_server_root, "keypress"))
+sys.path.append(os.path.join(home_server_root, "logger"))
+from comm import Comm
 from keypress import KeyPress
 from morse_maker import MorseMaker
+from logger import Logger
 
 class Radio():
     def __init__(self, inputter):
-        self.comm = Comm(5000, "player", {})
+        self.logger = Logger("radio")
+        self.logger.log("Started radio")
+        self.comm = Comm(5000, "player", {}, self.logger)
         self.inputter = inputter
         self.main_menu = KeyPress.mkUnion([
             KeyPress.compile(".A.a<match>", match=lambda: self.youtube_play("metallica judas kiss")),

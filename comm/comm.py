@@ -6,12 +6,10 @@ import threading
 import time
 import urllib.parse
 
-def debug_print(x):
-    print(str(x).encode('unicode_escape').decode())
-
 class UnicastListener():
-    def __init__(self, cb, port):
+    def __init__(self, cb, port, logger):
         self.cb = cb
+        self.logger = logger
         self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         #Prepare a sever socket
@@ -37,7 +35,7 @@ class UnicastListener():
                     b = message.find(' ', a)
                     if b != -1:
                         data = message[a+1:b]
-                        debug_print("comm listener received %s" % data)
+                        self.logger.log("comm listener received %s" % data)
                         path  = urllib.parse.urlsplit(data).path
                         query = urllib.parse.urlsplit(data).query
                         params = urllib.parse.parse_qs(query)
@@ -49,13 +47,13 @@ class UnicastListener():
                     errorMsg = "Not Found"
                 else:
                     errorMsg = "Other error"
-                debug_print("comm listener replying %s" % ret[1])
+                self.logger.log("comm listener replying %s" % ret[1])
                 connectionSocket.send(bytes('HTTP/1.0 %d %s\r\n\r\n' % (ret[0], errorMsg), 'ascii') + ret[1].encode('utf-8', 'ignore'))
                 #connectionSocket.send('404 Not Found')
                 connectionSocket.close()
             except socket.timeout:
                 pass
-        print("closing serverSocket")
+        self.logger.log("closing serverSocket")
         self.serverSocket.close()
 
     def stop(self):
@@ -63,8 +61,8 @@ class UnicastListener():
         self.thread.join()
 
 class UnicastSender():
-    def __init__(self):
-        pass
+    def __init__(self, logger):
+        self.logger = logger
 
     def send(self, ip, port, function, args):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -72,12 +70,12 @@ class UnicastSender():
         try:
             s.connect((ip, port))
             req = "%s?%s" % (function, urllib.parse.urlencode(args, doseq=True))
-            debug_print("sender sending %s" % req)
+            self.logger.log("sender sending %s" % req)
             s.sendall(bytes("GET /%s HTTP/1.1\r\nHost: %s\r\n\r\n" % (req, ip), 'ascii'))
             ret_code = 500
             ret = "undefined"
             r = s.recv(4096).decode('utf-8', 'ignore')
-            debug_print("sender received = %s" % r)
+            self.logger.log("sender received = %s" % r)
             a = r.find(' ')
             if a != -1:
                 b = r.find(' ', a+1)
@@ -87,15 +85,16 @@ class UnicastSender():
                     if c != -1:
                         ret = r[c+4:]
             s.close()
-            debug_print("sender received %s" % ret)
+            self.logger.log("sender received %s" % ret)
             return (ret_code, ret)
         except ConnectionRefusedError:
-            print("Can't send. Connection refused!")
+            self.logger.log("Error: Can't send. Connection refused!")
             return (521, "Connection refused!")
 
 class MulticastListener():
-    def __init__(self, cb):
+    def __init__(self, cb, logger):
         self.cb = cb
+        self.logger = logger
         self.running = True
         mcast_grp = '224.1.1.1'
         mcast_port = 5007
@@ -125,7 +124,7 @@ class MulticastListener():
                 time.sleep(1)
             except socket.timeout:
                 pass
-        print("closing multicast socket")
+        self.logger.log("closing multicast socket")
         self.sock.close()
 
     def stop(self):
@@ -133,9 +132,10 @@ class MulticastListener():
         self.thread.join()
 
 class MulticastSender():
-    def __init__(self, service_name, functions):
+    def __init__(self, service_name, functions, logger):
         self.service_name = service_name
         self.functions = functions
+        self.logger = logger
         start_sleep = random.randint(500,1000)/1000.0
         self.timer = threading.Timer(start_sleep, self.send_whos_there)
         self.timer.start()
@@ -149,7 +149,7 @@ class MulticastSender():
         self.multicast(msg)
 
     def multicast(self, msg):
-        print("multicasting %s" % msg)
+        self.logger.log("multicasting %s" % msg)
         mcast_grp = '224.1.1.1'
         mcast_port = 5007
         # regarding socket.IP_MULTICAST_TTL
@@ -168,16 +168,17 @@ class MulticastSender():
 
 
 class Comm():
-    def __init__(self, port, service_name, functions):
+    def __init__(self, port, service_name, functions, logger):
         self.ip = self.get_ip()
         self.port = port
         self.service = service_name
         self.functions = functions
+        self.logger = logger
         self.others = {}
-        self.multicast_listener = MulticastListener(lambda data: self.mc_received(data))
-        self.multicast_sender = MulticastSender(service_name, list(functions.keys()))
-        self.unicast_listener = UnicastListener(self.uc_received, self.port)
-        self.unicast_sender = UnicastSender()
+        self.multicast_listener = MulticastListener(lambda data: self.mc_received(data), self.logger)
+        self.multicast_sender = MulticastSender(service_name, list(functions.keys()), self.logger)
+        self.unicast_listener = UnicastListener(self.uc_received, self.port, self.logger)
+        self.unicast_sender = UnicastSender(self.logger)
         start_sleep = random.randint(3000,3500)/1000.0
         self.timer = threading.Timer(start_sleep, self.send_im_here)
         self.timer.start()
@@ -195,7 +196,7 @@ class Comm():
         return ip
 
     def uc_received(self, path, params, ip, port):
-        debug_print("uc_received: '%s(%s)' from '%s:%d'" % (path, str(params), ip, port))
+        self.logger.log("uc_received: '%s(%s)' from '%s:%d'" % (path, str(params), ip, port))
         if path in self.functions:
             return self.functions[path](params)
         return (404, "Unknown function '%s'" % path)
@@ -204,12 +205,12 @@ class Comm():
         if ("port" in data) and data["port"] == self.port and ("ip" in data) and data["ip"] == self.ip:
             #mc message from my self
             return
-        print("%s:%s received %s" % (self.ip, self.port, data))
+        self.logger.log("%s:%s received %s" % (self.ip, self.port, data))
         if data["cmd"] == "whos_there":
             self.multicast_sender.send_im_here(self.ip, self.port)
         if data["cmd"] == "im_here":
             if data["port"] == str(self.port):
-                print("WARNING, identical ports: %s:%s (%s) and %s:%s (%s)" % (self.ip, self.port, self.service, data["ip"], data["port"], data["service"]))
+                self.logger.log("Error, identical ports: %s:%s (%s) and %s:%s (%s)" % (self.ip, self.port, self.service, data["ip"], data["port"], data["service"]))
             self.others[(data["ip"], data["port"])] = {"port": data["port"], "service": data["service"], "functions": data["functions"], "ip": data["ip"]}
 
     def send_im_here(self):

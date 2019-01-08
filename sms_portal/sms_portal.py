@@ -22,11 +22,10 @@ import re
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
+sys.path.append(os.path.join(home_server_root, "logger"))
 from comm import Comm
 from comm import UnicastListener
-
-def debug_print(x):
-    print(str(x).encode('unicode_escape').decode())
+from logger import Logger
 
 ##res = requests.get("https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=xxxxxxxx&to=+4526857540&Text=%s" % "outofmoney", timeout=2)
 ##print("res '%s'" % res)
@@ -34,17 +33,19 @@ def debug_print(x):
 
 class SmsPortal():
     def __init__(self):
-        self.comm = Comm(5003, "sms_portal", {"send_sms": self.send_sms})
+        self.logger = Logger("sms_portal")
+        self.logger.log("started SmsPortal")
+        self.comm = Comm(5003, "sms_portal", {"send_sms": self.send_sms}, self.logger)
         self.external_port = 5100
-        self.unicast_listener = UnicastListener(self.sms_received, self.external_port)
+        self.unicast_listener = UnicastListener(self.sms_received, self.external_port, self.logger)
         self.sms_password = self.load_obj("sms_password")[0]
         parser = argparse.ArgumentParser()
         parser.add_argument('--pay', action='store_true')
         self.args = parser.parse_args()
         if self.args.pay:
-            print("you must pay!")
+            self.logger.log("you must pay!")
         else:
-            print("WARNING, you can't send SMS'es")
+            self.logger.log("WARNING, you can't send SMS'es")
         self.sms_cmds = {
                 "p": self.cmd_p,
                 "py": self.cmd_py,
@@ -70,7 +71,7 @@ class SmsPortal():
 # http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=p%20metallica
 #sms: 'p metallica jump in the fire'
     def cmd_p(self, args):
-        debug_print("executing p(%s)" % str(args))
+        self.logger.log("executing p(%s)" % str(args))
         res = self.comm.call("music_server", "play", {"query": [args], "source": ["collection"]})
         res = self.comm.call("stream_receiver", "multicast", {})
         return None, None
@@ -78,13 +79,13 @@ class SmsPortal():
 # http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=p%20metallica
 #sms: 'py metallica jump in the fire'
     def cmd_py(self, args):
-        debug_print("executing py(%s)" % str(args))
+        self.logger.log("executing py(%s)" % str(args))
         res = self.comm.call("music_server", "play", {"query": [args], "source": ["youtube"]})
         res = self.comm.call("stream_receiver", "multicast", {})
         return None, None
 
     def cmd_emoji_receive(self, args):
-        debug_print("executing emoji_receive(%s)" % str(args))
+        self.logger.log("executing emoji_receive(%s)" % str(args))
         res = self.comm.call("emoji", "receive", {"text": [args]})
         print(res)
         if res[0] == 200:
@@ -93,16 +94,16 @@ class SmsPortal():
 
 #sms: 'es hello .UNICORN.'
     def cmd_emoji_send(self, args):
-        debug_print("executing emoji_send(%s)" % str(args))
+        self.logger.log("executing emoji_send(%s)" % str(args))
         res = self.comm.call("emoji", "send", {"text": [args]})
-        debug_print("emoji send res: %s" % (res,))
+        self.logger.log("emoji send res: %s" % (res,))
         if res[0] == 200:
             return res[1], False
         return None, None
 
 #sms: 'ping'
     def cmd_ping(self, args):
-        debug_print("pinging")
+        self.logger.log("pinging")
         res = self.comm.call("ping_server", "status", {})
         if res[0] == 200:
             return res[1], True
@@ -111,7 +112,7 @@ class SmsPortal():
 # http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=pinglog%20SG
 #sms: 'pinglog SG'
     def cmd_pinglog(self, args):
-        debug_print("ping log %s" % args)
+        self.logger.log("ping log %s" % args)
         res = self.comm.call("ping_server", "log", {"user": [args]})
         if res[0] == 200:
             return res[1], True
@@ -122,7 +123,7 @@ class SmsPortal():
 #sms: 'radio 24syv'
 #sms: 'radio p3'
     def cmd_radio(self, args):
-        debug_print("radio")
+        self.logger.log("radio")
         print(args)
         res = self.comm.call("stream_receiver", "radio", {"channel": [args]})
         return None, None
@@ -131,7 +132,7 @@ class SmsPortal():
 #sms: 'pod baelte'
 #sms: 'pod prev'
     def cmd_podcast(self, args):
-        debug_print("podcasting")
+        self.logger.log("podcasting")
         if args == "next":
             res = self.comm.call("music_server", "podcast", {"next": ["1"]})
         elif args == "prev":
@@ -154,7 +155,7 @@ class SmsPortal():
 
 # curl "http://asmund.dk:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=body"
     def sms_received(self, path, params, ip, port):
-        debug_print("sms_received: '%s(%s)' from '%s:%d'" % (path, str(params), ip, port))
+        self.logger.log("sms_received: '%s(%s)' from '%s:%d'" % (path, str(params), ip, port))
         if path != "suresms":
             return (200, "ok, but expected path == 'suresms', got '%s'" % path)
         if "receivedfromphonenumber" not in params:
