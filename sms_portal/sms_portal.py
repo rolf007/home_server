@@ -64,7 +64,7 @@ class SmsPortal():
         elif re.match("^[0-9]{10}$", phonenumber):
             fixed_number = ' ' + phonenumber
         if fixed_number != phonenumber:
-            print("fixing phone number '%s' -> '%s'" % (phonenumber, fixed_number))
+            self.logger.log("fixing phone number '%s' -> '%s'" % (phonenumber, fixed_number))
         return fixed_number
 
 
@@ -87,11 +87,12 @@ class SmsPortal():
     def cmd_emoji_receive(self, args):
         self.logger.log("executing emoji_receive(%s)" % str(args))
         res = self.comm.call("emoji", "receive", {"text": [args]})
-        print(res)
+        self.logger.log(res)
         if res[0] == 200:
             return res[1], False
         return None, None
 
+# http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=es .dolphin. .dolphin.
 #sms: 'es hello .UNICORN.'
     def cmd_emoji_send(self, args):
         self.logger.log("executing emoji_send(%s)" % str(args))
@@ -124,7 +125,7 @@ class SmsPortal():
 #sms: 'radio p3'
     def cmd_radio(self, args):
         self.logger.log("radio")
-        print(args)
+        self.logger.log(args)
         res = self.comm.call("stream_receiver", "radio", {"channel": [args]})
         return None, None
 
@@ -192,7 +193,7 @@ class SmsPortal():
         else:
             err = "Unknown command '%s', called with args '%s'" % (cmd, args)
             self.do_send_sms(receivedfromphonenumber, err, 1, False)
-            print(err)
+            self.logger.log("Error: " + err)
 
         return (200, "sms handled ok")
 
@@ -236,12 +237,12 @@ class SmsPortal():
         args = {"login": login, "password": pw, "to": to, "Text": text}
         req = "%s?%s" % (function, urllib.parse.urlencode(args, doseq=True))
         if self.args.pay:
-            print("sending sms: '%s' to '%s'" % (ascii(text), to))
+            self.logger.log("sending sms: '%s' to '%s'" % (ascii(text), to))
             res = requests.get("https://api.suresms.com/%s" % req, timeout=2)
-            print("res '%s'" % res)
+            self.logger.log("res '%s'" % res)
             return (200, "sent sms!")
         else:
-            print("would have sent sms: '%s'" % req)
+            self.logger.log("would have sent sms: '%s' to '%s'" % (text, to))
             return (200, "would have sent sms! '%s' to '%s'" % (text, to))
 
     def shut_down(self):

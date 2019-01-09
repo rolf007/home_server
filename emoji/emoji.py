@@ -21,40 +21,9 @@ from fuzzy_substring import fuzzy_substring
 # &#x1F984;
 # %F0%9F%A6%84
 
-def fuzzy_substring(needle, haystack):
-    """Calculates the fuzzy match of needle in haystack,
-    using a modified version of the Levenshtein distance
-    algorithm.
-    The function is modified from the levenshtein function
-    in the bktree module by Adam Hupp"""
-
-    m, n = len(needle), len(haystack)
-
-    # base cases
-    if m == 1:
-        return not needle in haystack
-    if not n:
-        return m
-
-    row1 = [0] * (n+1)
-    for i in range(0,m):
-        row2 = [i+1]
-        for j in range(0,n):
-            cost = ( needle[i] != haystack[j] )
-
-            row2.append( min(row1[j+1]+1, # deletion
-                               row2[j]+1, #insertion
-                               row1[j]+cost) #substitution
-                           )
-        row1 = row2
-    return min(row1)
-
-class Emoji():
-
-    def __init__(self):
-        self.logger = Logger("emoji")
-        self.logger.log("Started emoji")
-        self.comm = Comm(5004, "emoji", {"receive": self.receive, "send": self.send}, self.logger)
+class EmojiParser():
+    def __init__(self, logger):
+        self.logger = logger
         self.blocks = [
             #(0x13000, 0x1342F, "Egyptian Hieroglyphs"),
             (0x1F300, 0x1F600, "Miscellaneous Symbols and Pictographs"),
@@ -69,24 +38,8 @@ class Emoji():
                 'g': chr(0x1F641),#grief
                 'b': chr(0x1F6B4),#bike
                 }
-    # http://127.0.0.1:5004/receive?text=uni%F0%9F%A6%84corn
-    def receive(self, params):
-        if "text" not in params:
-            return (404, "function 'receive' requires 'text'")
-        text = params["text"][0]
-        ret = ""
-        for c in text:
-            if ord(c) >=32 and ord(c) < 254:
-                ret += c;
-            else:
-                ret += '.' + unicodedata.name(c) + '.'
-        return (200, "%s" % ret)
 
-    # http://127.0.0.1:5004/receive?text=See this. uni.UNICORN FACE.corn. I know you liked it.
-    def send(self, params):
-        if "text" not in params:
-            return (404, "function 'send' requires 'text'")
-        text = params["text"][0]
+    def send(self, text):
         ret = ""
         i = 0
         while i < len(text):
@@ -96,8 +49,7 @@ class Emoji():
             else:
                 ret += text[i]
                 i = i + 1
-        self.logger.log("emoji send %s" % ret)
-        return (200, "%s" % ret)
+        return ret
 
     def parse(self, i, text):
         h = i
@@ -118,8 +70,39 @@ class Emoji():
                         best_match = chr(u)
                 except:
                     pass
-        print(unicodedata.name(best_match))
+        self.logger(unicodedata.name(best_match))
         return i+1, best_match
+
+class Emoji():
+
+    def __init__(self):
+        self.logger = Logger("emoji")
+        self.logger.log("Started emoji")
+        self.comm = Comm(5004, "emoji", {"receive": self.receive, "send": self.send}, self.logger)
+        self.emoji_parser = EmojiParser(self.logger.log)
+    # http://127.0.0.1:5004/receive?text=uni%F0%9F%A6%84corn
+    def receive(self, params):
+        if "text" not in params:
+            return (404, "function 'receive' requires 'text'")
+        text = params["text"][0]
+        ret = ""
+        for c in text:
+            if ord(c) >=32 and ord(c) < 254:
+                ret += c;
+            else:
+                ret += '.' + unicodedata.name(c) + '.'
+        return (200, "%s" % ret)
+
+    # http://127.0.0.1:5004/send?text=See this. uni.UNICORN FACE.corn. I know you liked it.
+    def send(self, params):
+        if "text" not in params:
+            return (404, "function 'send' requires 'text'")
+        text = params["text"][0]
+        ret = self.emoji_parser.send(text)
+
+        self.logger.log("emoji send %s" % ret)
+        return (200, "%s" % ret)
+
 
     def shut_down(self):
         self.comm.shut_down()
