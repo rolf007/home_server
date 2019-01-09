@@ -120,7 +120,7 @@ class MulticastListener():
         while self.running:
             try:
                 r = self.sock.recv(10240)
-                self.cb(json.loads(r))
+                self.cb(r)
                 time.sleep(1)
             except socket.timeout:
                 pass
@@ -132,21 +132,8 @@ class MulticastListener():
         self.thread.join()
 
 class MulticastSender():
-    def __init__(self, service_name, functions, logger):
-        self.service_name = service_name
-        self.functions = functions
+    def __init__(self, logger):
         self.logger = logger
-        start_sleep = random.randint(500,1000)/1000.0
-        self.timer = threading.Timer(start_sleep, self.send_whos_there)
-        self.timer.start()
-
-    def send_whos_there(self):
-        msg = json.dumps({"cmd": "whos_there"})
-        self.multicast(msg)
-
-    def send_im_here(self, ip, port):
-        msg = json.dumps({"cmd": "im_here", "port": port, "service": self.service_name, "functions": self.functions, "ip": ip})
-        self.multicast(msg)
 
     def multicast(self, msg):
         self.logger.log("multicasting %s" % msg)
@@ -164,7 +151,7 @@ class MulticastSender():
         sock.sendto(bb, (mcast_grp, mcast_port))
 
     def shut_down(self):
-        self.timer.cancel()
+        pass
 
 
 class Comm():
@@ -176,12 +163,14 @@ class Comm():
         self.logger = logger
         self.others = {}
         self.multicast_listener = MulticastListener(lambda data: self.mc_received(data), self.logger)
-        self.multicast_sender = MulticastSender(service_name, list(functions.keys()), self.logger)
+        self.multicast_sender = MulticastSender(self.logger)
         self.unicast_listener = UnicastListener(self.uc_received, self.port, self.logger)
         self.unicast_sender = UnicastSender(self.logger)
-        start_sleep = random.randint(3000,3500)/1000.0
-        self.timer = threading.Timer(start_sleep, self.send_im_here)
-        self.timer.start()
+        start_sleep = random.randint(500, 1000)/1000.0
+        self.startup_timer = threading.Timer(start_sleep, self.startup)
+        self.startup_timer.start()
+        self.logger.log("logger just started")
+        self.im_here_timer = None
 
     def get_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -201,20 +190,35 @@ class Comm():
             return self.functions[path](params)
         return (404, "Unknown function '%s'" % path)
 
-    def mc_received(self, data):
+    def mc_received(self, r):
+        data = json.loads(r)
         if ("port" in data) and data["port"] == self.port and ("ip" in data) and data["ip"] == self.ip:
             #mc message from my self
             return
         self.logger.log("%s:%s received %s" % (self.ip, self.port, data))
         if data["cmd"] == "whos_there":
-            self.multicast_sender.send_im_here(self.ip, self.port)
+            self.send_im_here_timed()
         if data["cmd"] == "im_here":
             if data["port"] == str(self.port):
                 self.logger.log("Error, identical ports: %s:%s (%s) and %s:%s (%s)" % (self.ip, self.port, self.service, data["ip"], data["port"], data["service"]))
             self.others[(data["ip"], data["port"])] = {"port": data["port"], "service": data["service"], "functions": data["functions"], "ip": data["ip"]}
 
+    def startup(self):
+        self.logger.log("sending who's there")
+        msg = json.dumps({"cmd": "whos_there"})
+        self.multicast_sender.multicast(msg)
+        self.send_im_here_timed()
+
+    def send_im_here_timed(self):
+        if self.im_here_timer != None:
+            self.im_here_timer.cancel()
+        im_here_sleep = random.randint(3000, 3500)/1000.0
+        self.im_here_timer = threading.Timer(im_here_sleep, self.send_im_here)
+        self.im_here_timer.start()
+
     def send_im_here(self):
-        self.multicast_sender.send_im_here(self.ip, self.port)
+        msg = json.dumps({"cmd": "im_here", "port": self.port, "service": self.service, "functions": list(self.functions.keys()), "ip": self.ip})
+        self.multicast_sender.multicast(msg)
 
     def call(self, service, function, args):
         for other in self.others:
@@ -227,5 +231,6 @@ class Comm():
             self.unicast_listener.stop()
         self.multicast_listener.stop()
         self.multicast_sender.shut_down()
-        self.timer.cancel()
+        self.startup_timer.cancel()
+        self.im_here_timer.cancel()
 
