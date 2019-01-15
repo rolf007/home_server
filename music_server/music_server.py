@@ -93,7 +93,7 @@ class VlcThread():
         self.p = None
 
 
-def load_collection():
+def load_collection(logger):
     collection_path = os.path.join(home_server_config, "collections")
     music_collection = {}
 
@@ -102,6 +102,7 @@ def load_collection():
         for file in files:
             if file.endswith(b'.json'):
                 full_path = os.path.join(root, file)
+                logger.log("found collection %s" % file)
                 with open(full_path) as f:
                     music_collection = {**music_collection, **json.load(f)}
     return music_collection
@@ -207,7 +208,7 @@ class MusicServer():
     def __init__(self):
         self.logger = Logger("music_server")
         self.logger.log("loading music collection...")
-        self.music_collection = load_collection()
+        self.music_collection = load_collection(self.logger)
         self.logger.log("music collection loaded %d tracks" % len(self.music_collection))
         self.vlc_thread = VlcThread(self.logger)
         self.podcaster = Podcaster()
