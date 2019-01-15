@@ -2,6 +2,7 @@
 
 import argparse
 import curses
+import curses.textpad
 import eyed3
 import os
 import re
@@ -13,6 +14,13 @@ parser.add_argument('mp3s', nargs='+')#, action=MyAction)
 args = parser.parse_args()
 
 screen = curses.initscr()
+# don't echo key strokes on the screen
+curses.noecho()
+# read keystrokes instantly, without waiting for enter to ne pressed
+curses.cbreak()
+# enable keypad mode
+#screen.keypad(1)
+
 main_cursor_x = 0
 main_cursor_y = 0
 fix_cursor_x = 0
@@ -20,6 +28,17 @@ num_columns = 7
 screen_end = 0
 files = []
 menu = "main"
+selected = []
+
+def maketextbox(h,w,y,x,info="",value="",textColorpair=0):
+    nw = curses.newwin(h,w,y,x)
+    txtbox = curses.textpad.Textbox(nw, insert_mode=True)
+
+    screen.addstr(y-1,x,info,textColorpair)
+    nw.addstr(0,0,value,textColorpair)
+    nw.attron(textColorpair)
+    screen.refresh()
+    return txtbox
 
 def repr_item(s):
     if type(s) is tuple:
@@ -28,7 +47,10 @@ def repr_item(s):
         else:
             s = '/'
     elif type(s) is eyed3.id3.Genre:
-        s = s.name
+        if s.id != None:
+            s = "(%d)%s" % (s.id, s.name)
+        else:
+            s = "()%s" % s.name
     elif s is None:
         s = "<None>"
     return s;
@@ -36,6 +58,10 @@ def repr_item(s):
 def just(s, adj):
     s = repr_item(s)
     return s.ljust(adj)[:adj]
+
+def get_column_name(x):
+    column_names = ["Url", "Album", "Track_num", "Artist", "Title", "Genre", "Release date"]
+    return column_names[x]
 
 def get_color(x, y):
     if main_cursor_y == y or main_cursor_x == x:
@@ -51,7 +77,9 @@ def get_color(x, y):
     return color
 
 def get_item(x, i):
-    file = files[i]
+    return get_item2(x, files[i])
+
+def get_item2(x, file):
     url = file["url"]
     album = file["id3"].tag.album
     track_num = file["id3"].tag.track_num
@@ -63,7 +91,9 @@ def get_item(x, i):
     return columns[x]
 
 def set_item(x, i, value):
-    file = files[i]
+    set_item2(x, files[i], value)
+
+def set_item2(x, file, value):
     if x == 0:
         pass
     elif x == 1:
@@ -75,10 +105,20 @@ def set_item(x, i, value):
     elif x == 4:
         file["id3"].tag.title = value
     elif x == 5:
-        file["id3"].tag.genre = value
+        try:
+            file["id3"].tag.genre = value
+        except ValueError:
+            pass
     elif x == 6:
         file["id3"].tag.release_date = value
 
+def select_cursor_line_if_none_selected():
+    any_selected = False
+    for f in files:
+        if f["selected"]:
+            any_selected = True
+    if not any_selected:
+        files[main_cursor_y]["selected"] = not files[main_cursor_y]["selected"]
 
 for url in args.mp3s:
     # if not os.path.isabs(scan_path):
@@ -107,35 +147,35 @@ def draw():
     screen.clear()
     y = 4
     color = curses.color_pair(1)
-    column_addstr(y, 2, "Url", 0, color)
-    column_addstr(y, 2, "A(l)bum", 1, color)
-    column_addstr(y, 2, "Track_num", 2, color)
-    column_addstr(y, 2, "A(r)tist", 3, color)
-    column_addstr(y, 2, "(t)itle", 4, color)
-    column_addstr(y, 2, "(G)enre", 5, color)
-    column_addstr(y, 2, "R(e)lease date", 6, color)
+    for column in range(num_columns):
+        column_addstr(y, 2, get_column_name(column), column, color)
     y = y + 1
     i = 0
     for file in files:
-        for col in range(num_columns):
-            column_addstr(y, 2, get_item(col, i), col, get_color(col, i))
+        for column in range(num_columns):
+            column_addstr(y, 2, get_item(column, i), column, get_color(column, i))
         i = i + 1
         y = y + 1
     screen.addstr(y, 2, just(get_item(main_cursor_x, main_cursor_y), 120), curses.A_BOLD)
     y = y + 1
     y = y + 1
     if menu == "main":
-        screen.addstr(y, 2, "<space>: toggle select a:select all/none", curses.A_BOLD)
+        screen.addstr(y, 2, "<space>: toggle select", curses.A_BOLD)
+        y = y + 1
+        screen.addstr(y, 2, "a:select all/none", curses.A_BOLD)
         y = y + 1
         screen.addstr(y, 2, "<up>/<down>/<left>/<right>: cursor", curses.A_BOLD)
         y = y + 1
-        screen.addstr(y, 2, "q: quit f:fix id3 for selected column", curses.A_BOLD)
+        screen.addstr(y, 2, "q: quit", curses.A_BOLD)
+        y = y + 1
+        screen.addstr(y, 2, "f: fix id3 for selected column", curses.A_BOLD)
+        y = y + 1
+        screen.addstr(y, 2, "e: edit id3 for selected column", curses.A_BOLD)
         y = y + 1
         screen.addstr(y, 2, "Please select an option...", curses.A_BOLD)
     return y+1
 
-def suggest_algo_fs(i):
-    file = files[i]
+def suggest_algo_fs(file):
     suggestion = "xx"
     if fix_cursor_x >= 0:
         filename_items = re.split("[ _]-[ _]", file["url"])
@@ -151,12 +191,11 @@ def suggest_algo_fs(i):
             suggestion = "foo"
     return suggestion
 
-def suggest_algo_from_id3(i):
-    file = files[i]
-    artist = get_item(3, i)
-    title = get_item(4, i)
+def suggest_algo_from_id3(file):
+    artist = get_item2(3, file)
+    title = get_item2(4, file)
     filename, ext = os.path.splitext(file["url"])
-    track = get_item(2, i)
+    track = get_item2(2, file)
     if track: track = track[0]
     ret = ""
     if track:
@@ -175,51 +214,41 @@ def suggest_algo_from_id3(i):
 def suggest_algo_track_number(i, n):
     return (i+1,n)
 
-def suggest_algo_genre():
-    return eyed3.id3.Genre('Thrash Metal')
-
-def get_suggestion(main_cursor_x, i, j, num_selected):
+def get_suggestion(main_cursor_x, file, j, num_selected):
     if main_cursor_x == 0:
-        return suggest_algo_from_id3(i)
+        return suggest_algo_from_id3(file)
     elif main_cursor_x == 1 or main_cursor_x == 3 or main_cursor_x == 4:
-        return suggest_algo_fs(i)
+        return suggest_algo_fs(file)
     elif main_cursor_x == 2:
         return suggest_algo_track_number(j, num_selected)
-    elif main_cursor_x == 5:
-        return suggest_algo_genre()
-    return "bar"
+    return None
 
 def draw_fix_menu():
     if menu == "fix":
         y = screen_end
-        num_selected = 0
-        for file in files:
-            if file["selected"]:
-                num_selected += 1
-        i = 0
+        num_selected = len(selected)
         j = 0
-        for file in files:
-            if file["selected"]:
-                current = get_item(main_cursor_x, i)
-                suggestion = get_suggestion(main_cursor_x, i, j, num_selected)
+        for file in selected:
+            current = get_item2(main_cursor_x, file)
+            suggestion = get_suggestion(main_cursor_x, file, j, num_selected)
 
-                screen.addstr(y, 2, "'%s' -> '%s'" % (repr_item(current), repr_item(suggestion)), curses.A_BOLD)
-                y = y + 1
-                j = j + 1
-            i = i + 1
+            screen.addstr(y, 2, "'%s' -> '%s'" % (repr_item(current), repr_item(suggestion)), curses.A_BOLD)
+            y = y + 1
+            j = j + 1
 
 def perform_fix():
-    num_selected = 0
-    for file in files:
-        if file["selected"]:
-            num_selected += 1
-    i = 0
+    num_selected = len(selected)
     j = 0
+    for file in selected:
+        suggestion = get_suggestion(main_cursor_x, file, j, num_selected)
+        set_item2(main_cursor_x, file, suggestion)
+        j = j + 1
+
+def perform_edit(new_value):
+    i = 0
     for file in files:
         if file["selected"]:
-            suggestion = get_suggestion(main_cursor_x, i, j, num_selected)
-            set_item(main_cursor_x, i, suggestion)
-            j = j + 1
+            set_item(main_cursor_x, i, new_value)
         i = i + 1
 
 arrow_state = 0
@@ -276,13 +305,20 @@ while True:
             for f in files:
                 f["selected"] = not b
         elif ch == 'f':
-            menu = "fix"
-            any_selected = False
-            for f in files:
-                if f["selected"]:
-                    any_selected = True
-            if not any_selected:
-                files[main_cursor_y]["selected"] = not files[main_cursor_y]["selected"]
+            if main_cursor_x != 5 and main_cursor_x != 6:
+                select_cursor_line_if_none_selected()
+                selected = []
+                for f in files:
+                    if f["selected"]:
+                        selected.append(f)
+                if len(selected) == 0:
+                    selected = [files[main_cursor_y]]
+                menu = "fix"
+        if ch == 'e':
+            select_cursor_line_if_none_selected()
+            foo = maketextbox(1, 40, screen_end+1, 2, "enter %s. Use ^H for backspace" % get_column_name(main_cursor_x), "foo", textColorpair=curses.color_pair(0))
+            text = foo.edit()
+            perform_edit(text)
     elif menu == "fix":
         if ch == 'q':
             menu = "main"
