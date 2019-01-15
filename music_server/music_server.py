@@ -245,8 +245,48 @@ class MusicServer():
                 f.write('"%s": {"%s": "%s"},\n' % (filename, key, value[0]))
         return (200, "tagging ok")
 
-#http://127.0.0.1:5001/play?query=sanitarium
-#http://127.0.0.1:5001/play?source=youtube&query=sanitarium
+#Play song from collection, where title matches the best:
+#http://127.0.0.1:5001/play?title=sanitarium
+#Play all songs in collection with this artist, fuzzy match:
+#http://127.0.0.1:5001/play?artist=metalliac
+#Play song from youtube now:
+#http://127.0.0.1:5001/play?source=youtube&query=sanitarium&enqueue=now
+#Play predefined playlist:
+#http://127.0.0.1:5001/play?source=list&query=lanparty
+#Play all 5-star rock songs:
+#http://127.0.0.1:5001/play?genre=,rock&stars=5
+#Play all instrumental iron maiden songs now:
+#http://127.0.0.1:5001/play?artist=iron maiden&instrumental=1&enqueue=now
+#Play all songs where title contains 'thor', 'thunder' OR 'hammer'
+#http://127.0.0.1:5001/play?title=/thor|thunder|hammer&num=0
+#Play all songs where title contains 'thor', 'thunder' AND 'hammer'
+#http://127.0.0.1:5001/play?title=/thor&title=/thunder&title=/hammer&num=0
+#Play next song in playlist
+#http://127.0.0.1:5001/play?next=1
+
+#source=[youtube|collection|list] search on youtube, search in local collection or search in predefined playlists. Default 'collection'
+#enqueue=[now|next|end|replace] where to put new song(s) on playlist. If 'source' is 'list', default to 'replace'. Else default to 'end'
+#query=<string> fuzzy search. Only valid if 'source' is 'list' or 'youtube'
+
+# the remaining values are only valid, if 'source' is 'collection'
+#num=N number of matches. If there's one or more fuzzy matchers, '0' means 'all equally best matches'. Else '0' means 'all matches'.
+#                         If search criteria include for 'title' or 'url', then default to '1'. Else default to '0'
+
+#artist=<string>
+#album=<string>
+#title=<string>
+#genre=<string>
+#url=<string>
+#year=<string>
+# prefixes in the above search strings mean:
+#    , exact match. Use '|' for 'or': 'genre=,metal'. Matches 'metal', but not 'thrash metal'. Same as 'genre=/^metal$'
+#    / regex match: 'title=/^[0-9]+\saca[sc]ia\s+avenue'
+#    - match numeric range: 'year=-1980-1985' matches songs from 1980 to 1985, both years included. 'stars=-4-5'
+#    ! combined with one of the above: no match: 'artist=!,vanilla ice'. Matches if artist isn't 'vanilla ice'
+#    : case sensitive: 'album=:,Killers'
+#    no prefix means fuzzy match (modified Levenshtein distance). Use '|' for 'or'
+
+# sort: first by artist, then by release_date, then by album, then by track_number, finally by title.
     def play(self, params):
         if "query" not in params:
             return (404, "'query' is a required argument to 'play'")
