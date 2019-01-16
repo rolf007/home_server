@@ -203,13 +203,37 @@ class Podcaster():
                 return (404, "Failed to get sound file"), None
         return (200, "Found '%d' episodes. Starting program '%s'" % (len(self.episodes), self.program_name)), filename
 
+class MusicCollection():
+    def __init__(self, logger, collection):
+        self.logger = logger
+        self.music_collection = collection
+        self.logger.log("music collection loaded %d tracks" % len(self.music_collection))
+
+    def play(self, params):
+        total_score = {}
+        for keyword in ["title", "artist"]:
+            if keyword in params:
+                for kw in params[keyword]:
+                    for url, music in self.music_collection.items():
+                        collection_kw = music[keyword]
+                        if not collection_kw:
+                            score = 1000
+                        else:
+                            score = fuzzy_substring(kw.lower(), collection_kw.lower())
+                        if url not in total_score:
+                            total_score[url] = 0
+                        total_score[url] += score
+
+        print("total_score:", total_score)
+        a_min = min(total_score, key=total_score.get)
+        best_score = total_score[a_min]
+        return [url for url, score in total_score.items() if score == best_score]
 
 class MusicServer():
     def __init__(self):
         self.logger = Logger("music_server")
         self.logger.log("loading music collection...")
-        self.music_collection = load_collection(self.logger)
-        self.logger.log("music collection loaded %d tracks" % len(self.music_collection))
+        self.music_collection = MusicCollection(self.logger, load_collection(self.logger))
         self.vlc_thread = VlcThread(self.logger)
         self.podcaster = Podcaster()
         self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast, "tag": self.tag}, self.logger)
@@ -288,8 +312,6 @@ class MusicServer():
 
 # sort: first by artist, then by release_date, then by album, then by track_number, finally by title.
     def play(self, params):
-        if "query" not in params:
-            return (404, "'query' is a required argument to 'play'")
         if ("source" in params):
             source = params["source"][0]
         else:
@@ -301,28 +323,9 @@ class MusicServer():
         return (404, "Source must be 'collection' or 'youtube'")
 
     def play_collection(self, params):
-        query = params["query"][0]
-        print("play: '%s'" % query)
-        best_match = {}
-        best_score = -1
-        for url, music in self.music_collection.items():
-            title = music["title"]
-            if not title:
-                continue
-            score = fuzzy_substring(query.lower(), title.lower())
-            #print("score = %s (%s)" % (score, title))
-            if score < best_score or best_score == -1.0:
-                best_score = score
-                best_match = music
-                best_url = url
-        if best_score == -1:
+        best_url = self.music_collection.play(params)[0]
+        if best_url == None:
             return (404, "Music collection seems to be empty")
-        artist = "unknown" if "artist" not in best_match else best_match["artist"]
-        title = "unknown" if "title" not in best_match else best_match["title"]
-        url = best_url
-        self.logger.log("artist: '%s'" % artist)
-        self.logger.log("title: '%s'" % title)
-        self.logger.log("url: '%s'" % url)
         self.enqueue_file(best_url, params)
         return (200, "playing: '" + artist + " - " + title + "'")
 
@@ -331,6 +334,8 @@ class MusicServer():
         # python -m youtube_dl -x --audio-format mp3 gsoNl0MzDFA -o '%(artist)s - %(title)s.%(ext)s'
         # python -m youtube_dl ytsearch:"metallica jump in the fire" -o 'foo2'
         #https://github.com/rg3/youtube-dl/commit/6d7359775ae4eef1d1213aae81e092467a2c675c
+        if "query" not in params:
+            return (404, "if 'source' is 'youtube', 'query' is a required argument to 'play'")
         query = params["query"][0]
         print("play: '%s'" % query)
 
@@ -374,10 +379,11 @@ class MusicServer():
         self.comm.shut_down()
         print("music_server shutted down!")
 
-music_server = MusicServer()
-try:
-    while True:
-        time.sleep(2.0)
-except KeyboardInterrupt:
-    pass
-music_server.shut_down()
+if __name__ == '__main__':
+    music_server = MusicServer()
+    try:
+        while True:
+            time.sleep(2.0)
+    except KeyboardInterrupt:
+        pass
+    music_server.shut_down()

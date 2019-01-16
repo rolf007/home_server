@@ -72,7 +72,7 @@ class SmsPortal():
 #sms: 'p metallica jump in the fire'
     def cmd_p(self, args):
         self.logger.log("executing p(%s)" % str(args))
-        res = self.comm.call("music_server", "play", {"query": [args], "source": ["collection"]})
+        res = self.comm.call("music_server", "play", {"title": [args], "source": ["collection"]})
         res = self.comm.call("stream_receiver", "multicast", {})
         return None, None
 

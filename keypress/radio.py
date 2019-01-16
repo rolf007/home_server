@@ -92,11 +92,11 @@ class Radio():
             print("failed to send %s" % e)
         res = self.comm.call("stream_receiver", "multicast", {})
 
-    def multicast_play(self, query):
-        if query:
-            print("requesting '%s'" % query)
+    def multicast_play(self, title):
+        if title:
+            print("requesting '%s'" % title)
             try:
-                res = self.comm.call("music_server", "play", {"query": [query]})
+                res = self.comm.call("music_server", "play", {"title": [title]})
                 print("res = %d %s" % res)
             except requests.ConnectionError as e:
                 print("failed to send %s" % e)
