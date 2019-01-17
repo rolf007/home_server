@@ -249,10 +249,11 @@ class SmsPortal():
         self.comm.shut_down()
         self.unicast_listener.stop()
 
-sms_portal = SmsPortal()
-try:
-    while True:
-        time.sleep(2.0)
-except KeyboardInterrupt:
-    pass
-sms_portal.shut_down()
+if __name__ == '__main__':
+    sms_portal = SmsPortal()
+    try:
+        while True:
+            time.sleep(2.0)
+    except KeyboardInterrupt:
+        pass
+    sms_portal.shut_down()
