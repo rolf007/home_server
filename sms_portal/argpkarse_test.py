@@ -55,5 +55,29 @@ class TestArgpKarse(unittest.TestCase):
         self.t(parser, ".s hello.", {'s': 'hello'}, "")
         self.t(parser, ".shello.", {'s': 'hello'}, "")
 
+    def test_int(self):
+        parser = ArgpKarse()
+        parser.add_argument('.i', type=int, default=42)
+        self.t(parser, ".i12 world", {'i': 12}, "world")
+        self.t(parser, ".i-12 world", {'i': -12}, "world")
+        self.t(parser, ".i 12 world", {'i': 12}, "world")
+        self.t(parser, ".i 12  world", {'i': 12}, " world")
+        self.t(parser, ".i  12 world", {'i': 1}, " 12 world")
+        self.t(parser, "world", {'i': 42}, "world")
+        self.t(parser, " world .i16.", {'i': 42}, " world .i16.")
+        self.t(parser, ".i world", {'i': 1}, "world")
+        self.t(parser, ".i. world", {'i': 1}, "world")
+        self.t(parser, ".i25world", {'i': 25}, "world")
+        self.t(parser, ".i25. world", {'i': 25}, "world")
+
+    def test_bool(self):
+        parser = ArgpKarse()
+        parser.add_argument('.t', type=bool, default=True)
+        parser.add_argument('.f', type=bool, default=False)
+        self.t(parser, "world", {'t': True, 'f':False}, "world")
+        self.t(parser, ".f world", {'t': True, 'f':True}, "world")
+        self.t(parser, ".f1.t0 world", {'t': False, 'f':True}, "world")
+
+
 if __name__ == '__main__':
     unittest.main()

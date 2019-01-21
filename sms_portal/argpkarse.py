@@ -118,7 +118,7 @@ class ArgpKarse:
                     arg = self.arg_name_list[arg_name]
                     if arg["type"] == bool:
                         state = State.parse_bool
-                        value = ""
+                        value = None
                         extra_space = False
                     elif arg["type"] == int:
                         state = State.parse_int
@@ -137,9 +137,64 @@ class ArgpKarse:
             elif state == State.found_dotdot:
                 pass
             elif state == State.parse_bool:
-                pass
+                if c == None:
+                    args[arg_name] = True
+                    break
+                elif c == ' ':
+                    if extra_space == False and value == None:
+                        extra_space = True
+                    else:
+                        args[arg_name] = value
+                        args.remain = s[i:]
+                        break
+                elif c == '.':
+                    args[arg_name] = value
+                    state = State.found_dot
+                elif c in ['0','1']:
+                    if value == None:
+                        if c == '0':
+                            value = False
+                        elif c == '1':
+                            value = True
+                    else:
+                        args[arg_name] = value
+                        args.remain = s[i:]
+                        break
+                else:
+                    if value == None:
+                        value = True
+                    args[arg_name] = value
+                    args.remain = s[i:]
+                    break
             elif state == State.parse_int:
-                pass
+                if c == None:
+                    args[arg_name] = value
+                    break
+                elif c == ' ':
+                    if extra_space == False and len(value) == 0:
+                        extra_space = True
+                    else:
+                        if extra_space and len(value) == 0:
+                            args.remain = s[i:]
+                        else:
+                            args.remain = s[i+1:]
+                        if len(value) == 0:
+                            value = "1"
+                        args[arg_name] = int(value)
+                        break
+                elif c == '.':
+                    if len(value) == 0:
+                        value = "1"
+                    args[arg_name] = int(value)
+                    state = State.found_dot
+                elif c in ['-','0','1','2','3','4','5','6','7','8','9']:
+                    value = value + c
+                else:
+                    if len(value) == 0:
+                        value = "1"
+                    args[arg_name] = int(value)
+                    args.remain = s[i:]
+                    break
             elif state == State.parse_str:
                 if c == None:
                     args[arg_name] = value
@@ -148,11 +203,11 @@ class ArgpKarse:
                     if extra_space == False and len(value) == 0:
                         extra_space = True
                     else:
-                        args[arg_name] = value
                         if extra_space and len(value) == 0:
                             args.remain = s[i:]
                         else:
                             args.remain = s[i+1:]
+                        args[arg_name] = value
                         break
                 elif c == '.':
                     args[arg_name] = value
