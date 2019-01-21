@@ -31,6 +31,19 @@ menu = "main"
 selected = []
 
 def maketextbox(h,w,y,x,info="",value="",textColorpair=0):
+#Control-A 	Go to left edge of window.
+#Control-B 	Cursor left, wrapping to previous line if appropriate.
+#Control-D 	Delete character under cursor.
+#Control-E 	Go to right edge (stripspaces off) or end of line (stripspaces on).
+#Control-F 	Cursor right, wrapping to next line when appropriate.
+#Control-G 	Terminate, returning the window contents.
+#Control-H 	Delete character backward.
+#Control-J 	Terminate if the window is 1 line, otherwise insert newline.
+#Control-K 	If line is blank, delete it, otherwise clear to end of line.
+#Control-L 	Refresh screen.
+#Control-N 	Cursor down; move down one line.
+#Control-O 	Insert a blank line at cursor location.
+#Control-P 	Cursor up; move up one line.
     nw = curses.newwin(h,w,y,x)
     txtbox = curses.textpad.Textbox(nw, insert_mode=True)
 
@@ -38,7 +51,10 @@ def maketextbox(h,w,y,x,info="",value="",textColorpair=0):
     nw.addstr(0,0,value,textColorpair)
     nw.attron(textColorpair)
     screen.refresh()
-    return txtbox
+    text = txtbox.edit()
+    if len(text) > 0 and text[-1] == ' ':
+        text = text[:-1]
+    return text
 
 def repr_item(s):
     if type(s) is tuple:
@@ -51,6 +67,8 @@ def repr_item(s):
             s = "(%d)%s" % (s.id, s.name)
         else:
             s = "()%s" % s.name
+    elif type(s) is eyed3.core.Date:
+        s = str(s)
     elif s is None:
         s = "<None>"
     return s;
@@ -65,10 +83,16 @@ def get_column_name(x):
 
 def get_color(x, y):
     if main_cursor_y == y or main_cursor_x == x:
-        if files[y]["selected"]:
-            color = curses.color_pair(3)|curses.A_BOLD
+        if main_cursor_y == y and main_cursor_x == x:
+            if files[y]["selected"]:
+                color = curses.color_pair(6)|curses.A_BOLD
+            else:
+                color = curses.color_pair(5)
         else:
-            color = curses.color_pair(1)
+            if files[y]["selected"]:
+                color = curses.color_pair(3)|curses.A_BOLD
+            else:
+                color = curses.color_pair(1)
     else:
         if files[y]["selected"]:
             color = curses.color_pair(4)|curses.A_BOLD
@@ -94,23 +118,23 @@ def set_item(x, i, value):
     set_item2(x, files[i], value)
 
 def set_item2(x, file, value):
-    if x == 0:
-        pass
-    elif x == 1:
-        file["id3"].tag.album = value
-    elif x == 2:
-        file["id3"].tag.track_num = value
-    elif x == 3:
-        file["id3"].tag.artist = value
-    elif x == 4:
-        file["id3"].tag.title = value
-    elif x == 5:
-        try:
-            file["id3"].tag.genre = value
-        except ValueError:
+    try:
+        if x == 0:
             pass
-    elif x == 6:
-        file["id3"].tag.release_date = value
+        elif x == 1:
+            file["id3"].tag.album = value
+        elif x == 2:
+            file["id3"].tag.track_num = tuple([int(x) for x in value.split('/')])
+        elif x == 3:
+            file["id3"].tag.artist = value
+        elif x == 4:
+            file["id3"].tag.title = value
+        elif x == 5:
+            file["id3"].tag.genre = value
+        elif x == 6:
+            file["id3"].tag.release_date = value
+    except ValueError:
+        pass
 
 def select_cursor_line_if_none_selected():
     any_selected = False
@@ -119,6 +143,12 @@ def select_cursor_line_if_none_selected():
             any_selected = True
     if not any_selected:
         files[main_cursor_y]["selected"] = not files[main_cursor_y]["selected"]
+
+def get_first_selected():
+    for f in files:
+        if f["selected"]:
+            return f
+    return None
 
 for url in args.mp3s:
     # if not os.path.isabs(scan_path):
@@ -136,6 +166,8 @@ curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN);
 curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_BLUE);
 curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_CYAN);
 curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLUE);
+curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_WHITE);
+curses.init_pair(6, curses.COLOR_YELLOW, curses.COLOR_WHITE);
 
 def column_addstr(y, x, s, c, color):
     adj = [30,20,3,10,20,12,8]
@@ -153,10 +185,10 @@ def draw():
     i = 0
     for file in files:
         for column in range(num_columns):
-            column_addstr(y, 2, get_item(column, i), column, get_color(column, i))
+            column_addstr(y, 2, repr_item(get_item(column, i)), column, get_color(column, i))
         i = i + 1
         y = y + 1
-    screen.addstr(y, 2, just(get_item(main_cursor_x, main_cursor_y), 120), curses.A_BOLD)
+    screen.addstr(y, 2, just(repr_item(get_item(main_cursor_x, main_cursor_y)), 120), curses.A_BOLD)
     y = y + 1
     y = y + 1
     if menu == "main":
@@ -316,9 +348,10 @@ while True:
                 menu = "fix"
         if ch == 'e':
             select_cursor_line_if_none_selected()
-            foo = maketextbox(1, 40, screen_end+1, 2, "enter %s. Use ^H for backspace" % get_column_name(main_cursor_x), "foo", textColorpair=curses.color_pair(0))
-            text = foo.edit()
-            perform_edit(text)
+            value = repr_item(get_item2(main_cursor_x, get_first_selected()))
+            text = maketextbox(1, 40, screen_end+1, 2, "enter %s. Use ^H for backspace, ^A^K to delete line, ^A^K^G to cancel" % get_column_name(main_cursor_x), value, textColorpair=curses.color_pair(0))
+            if text != "":
+                perform_edit(text)
     elif menu == "fix":
         if ch == 'q':
             menu = "main"
