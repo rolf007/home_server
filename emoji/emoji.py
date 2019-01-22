@@ -66,7 +66,7 @@ class EmojiParser():
                 try:
                     name = unicodedata.name(chr(u))
                     score = fuzzy_substring(query.lower(), name.lower())
-                    if score < best_score or best_score == -1 or (score == best_score and len(name) < best_len)
+                    if score < best_score or best_score == -1 or (score == best_score and len(name) < best_len):
                         best_score = score
                         best_match = chr(u)
                         best_len = len(name)
