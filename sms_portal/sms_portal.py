@@ -26,6 +26,7 @@ sys.path.append(os.path.join(home_server_root, "logger"))
 from comm import Comm
 from comm import UnicastListener
 from logger import Logger
+from argpkarse import ArgpKarse
 
 ##res = requests.get("https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=xxxxxxxx&to=+4526857540&Text=%s" % "outofmoney", timeout=2)
 ##print("res '%s'" % res)
@@ -179,38 +180,26 @@ class SmsPortal():
         space = body.find(' ')
         if space == -1:
             cmd = body
-            args = ""
+            arglist = ""
         else:
             cmd = body[:space]
-            args = body[space+1:]
+            arglist = body[space+1:]
 
-        args, mobile = self.parse_mobile_arg(args, "m", "1")
-        mobile = int(mobile)
+        parser = ArgpKarse()
+        parser.add_argument('.m', type=int, default=0, empty=1)
+        args = parser.parse_args(arglist)
+        mobile = args.m
+        remain = args.remain
         if cmd in self.sms_cmds:
-            return_sms, tail = self.sms_cmds[cmd](args)
-            if return_sms != None:
+            return_sms, tail = self.sms_cmds[cmd](remain)
+            if return_sms != None and mobile > 0:
                 self.do_send_sms(receivedfromphonenumber, return_sms, mobile, tail)
         else:
-            err = "Unknown command '%s', called with args '%s'" % (cmd, args)
+            err = "Unknown command '%s', called with '%s'" % (cmd, remain)
             self.do_send_sms(receivedfromphonenumber, err, 1, False)
             self.logger.log("Error: " + err)
 
         return (200, "sms handled ok")
-
-    def parse_mobile_arg(self, args, arg_name, default_value = "1"):
-        value = default_value
-        s = re.search("^(?:(.*)\s)?\.%s([0-9]?)(?:\s(.*))?$" % arg_name, args)
-        if s:
-            value = s[2]
-            if s[1] and s[3]:
-                args = s[1] + " " + s[3]
-            elif s[1]:
-                args = s[1]
-            elif s[3]:
-                args = s[3]
-            else:
-                args = ""
-        return args, value
 
     def load_obj(self, name):
         with open(os.path.join(home_server_config, name + '.json'), 'rb') as f:
