@@ -12,43 +12,6 @@ from enum import Enum
 #cmd ..pay give money
 #cmd ..pay. give money
 
-#type bool:
-#es .b hello    set b to True
-#es .b. hello   set b to True
-#es hello       set b to default_missing
-#es .b0 hello   set b to False
-#es .b0. hello  set b to False
-#es .b1 hello   set b to True
-#es .b1. hello  set b to True
-
-#type int:
-#es .m hello    set m to 1
-#es .m. hello   set m to 1
-#es hello       set m to default_missing
-#es .m3hello    set m to 3
-#es .m3 hello   set m to 3
-#es .m3. hello  set m to 3
-
-#type: str
-#es .s hello world set s to 'hello'
-#es .s. hello      set s to ''
-#es hello          set s to default_missing
-#es .sfoo hello    set s to 'foo'
-#es .s foo hello   set s to 'foo'
-#es .sfoo. hello   set s to 'foo'
-#es .s foo. hello  set s to 'foo'
-
-#type: space_str
-#es .s hello       set s to 'hello'
-#es .s. hello      set s to ''
-#es hello          set s to default_missing
-#es .sfoo hello    set s to 'foo hello'
-#es .s foo hello   set s to 'foo hello'
-#es .sfoo hello.   set s to 'foo hello'
-#es .s foo hello.  set s to 'foo hello'
-#es .sfoo. hello   set s to 'foo'
-#es .s foo. hello  set s to 'foo'
-#es .s  foo. hello set s to ' foo'
 
 class space_str:
     pass
@@ -60,16 +23,100 @@ class State(Enum):
     init = 0
     found_dot = 1
     found_dotdot = 2
-    parse_bool = 3
-    parse_int = 4
-    parse_str = 5
-    parse_space_str = 6
+    parse_value = 3
 
 class ArgpKarse:
+    class Parse:
+        def __init__(self, empty, extra_space):
+            self.extra_space = extra_space
+            self.value = None
+            self.empty = empty
+        def parseSpace(self):
+            if self.extra_space == False and self.value == None:
+                self.extra_space = True
+                return None
+            else:
+                if self.extra_space and self.value == None:
+                    return 0
+                else:
+                    return 1
+        def finish(self):
+            if self.value == None:
+                return self.empty
+            return self.value
+
+    class ParseBool(Parse):
+        def __init__(self, empty, extra_space):
+            if empty == None:
+                empty = True
+            super(ArgpKarse.ParseBool, self).__init__(empty, extra_space)
+        def isLegal(self, c):
+            if self.value == None:
+                if c == '0':
+                    self.value = False
+                elif c == '1':
+                    self.value = True
+                else:
+                    return False
+                return True
+            return False
+
+    class ParseInt(Parse):
+        def __init__(self, empty, extra_space):
+            if empty == None:
+                empty = 1
+            super(ArgpKarse.ParseInt, self).__init__(empty, extra_space)
+            self.sign = 1
+        def isLegal(self, c):
+            if c == '-':
+                if self.sign == 1 and self.value == None:
+                    self.sign = -1
+                    return True
+            elif c in ['0','1','2','3','4','5','6','7','8','9']:
+                if self.value == None:
+                    self.value = 0
+                self.value = self.value*10
+                if self.value != 0 and self.sign == -1:
+                    self.value *= self.sign
+                    self.sign = 1
+                if self.value < 0:
+                    self.value -= ord(c) - ord('0')
+                else:
+                    self.value += ord(c) - ord('0')
+                return True
+            return False
+
+    class ParseStr(Parse):
+        def __init__(self, empty, extra_space):
+            if empty == None:
+                empty = ""
+            super(ArgpKarse.ParseStr, self).__init__(empty, extra_space)
+        def isLegal(self, c):
+            if c != ' ':
+                if self.value == None:
+                    self.value = ""
+                self.value = self.value + c
+                return True
+            return False
+
+
+    class ParseSpaceStr(Parse):
+        def __init__(self, empty, extra_space):
+            if empty == None:
+                empty = ""
+            super(ArgpKarse.ParseSpaceStr, self).__init__(empty, extra_space)
+        def isLegal(self, c):
+            if c == ' ' and self.extra_space == False and self.value == None:
+                return False
+            if self.value == None:
+                self.value = ""
+            self.value = self.value + c
+            return True
+
     def __init__(self):
         self.arg_name_list = {}
 
-    def add_argument(self, name, type=bool, default=None, required=False):
+    def add_argument(self, name, type=bool, default=None, required=False, empty=None):
         # where type is [str|int|bool|space_str]
         if len(name) < 2:
             raise Exception("arg name too short")
@@ -79,11 +126,31 @@ class ArgpKarse:
             if len(name) < 3:
                 raise Exception("missing arg name after '..'")
             else:
-                self.arg_name_list[name[2:]] = {'type': type, "default": default, "required": required}
+                self.arg_name_list[name[2:]] = {'type': type, "default": default, "required": required, "empty": empty}
         else:
             if len(name) != 2:
                 raise Exception("arg name after '.' must be one letter")
-            self.arg_name_list[name[1]] = {'type': type, "default": default, "required": required}
+            self.arg_name_list[name[1]] = {'type': type, "default": default, "required": required, "empty": empty}
+
+    def foo(self, arg_name, extra_space):
+        if arg_name not in self.arg_name_list:
+            raise Exception("unknwon arg name: '%s'" % arg_name)
+        arg = self.arg_name_list[arg_name]
+        if arg["type"] == bool:
+            state = State.parse_value
+            istate = ArgpKarse.ParseBool(arg["empty"], extra_space)
+        elif arg["type"] == int:
+            state = State.parse_value
+            istate = ArgpKarse.ParseInt(arg["empty"], extra_space)
+        elif arg["type"] == str:
+            state = State.parse_value
+            istate = ArgpKarse.ParseStr(arg["empty"], extra_space)
+        elif arg["type"] == space_str:
+            state = State.parse_value
+            istate = ArgpKarse.ParseSpaceStr(arg["empty"], extra_space)
+        else:
+            raise Exception("found unknown type")
+        return state, istate
 
     def parse_args(self, s):
         args = Args()
@@ -92,143 +159,61 @@ class ArgpKarse:
             args[a] = meta["default"]
         args["remain"] = ""
         state = State.init
-        for i in range(len(s)+1):
+        l = len(s)+1
+        i = -1
+        while i < l:
+            i = i + 1
             c = s[i] if i < len(s) else None
-            print(c)
             if state == State.init:
                 if c == None:
                     break
                 elif c == '.':
                     state = State.found_dot
                 else:
-                    args.remain = s[i:]
                     break
             elif state == State.found_dot:
                 if c == None:
                     break
                 elif c == '.':
+                    dotdot_name = ""
                     state = State.found_dotdot
                 elif c == ' ':
-                    args.remain = s[i+1:]
+                    i = i + 1
                     break
                 else:
                     arg_name = s[i]
-                    if arg_name not in self.arg_name_list:
-                        raise Exception("unknwon arg name: '%s'" % arg_name)
-                    arg = self.arg_name_list[arg_name]
-                    if arg["type"] == bool:
-                        state = State.parse_bool
-                        value = None
-                        extra_space = False
-                    elif arg["type"] == int:
-                        state = State.parse_int
-                        value = ""
-                        extra_space = False
-                    elif arg["type"] == str:
-                        state = State.parse_str
-                        value = ""
-                        extra_space = False
-                    elif arg["type"] == space_str:
-                        state = State.parse_space_str
-                        value = ""
-                        extra_space = False
-                    else:
-                        raise Exception("found unknown type")
+                    state, istate = self.foo(arg_name, False)
             elif state == State.found_dotdot:
-                pass
-            elif state == State.parse_bool:
                 if c == None:
-                    args[arg_name] = True
                     break
-                elif c == ' ':
-                    if extra_space == False and value == None:
-                        extra_space = True
-                    else:
-                        args[arg_name] = value
-                        args.remain = s[i:]
-                        break
                 elif c == '.':
-                    args[arg_name] = value
+                    arg_name = dotdot_name
+                    state, istate = self.foo(dotdot_name, True)
+                    args[arg_name] = istate.finish()
                     state = State.found_dot
-                elif c in ['0','1']:
-                    if value == None:
-                        if c == '0':
-                            value = False
-                        elif c == '1':
-                            value = True
-                    else:
-                        args[arg_name] = value
-                        args.remain = s[i:]
-                        break
+                elif c == ' ':
+                    arg_name = dotdot_name
+                    state, istate = self.foo(dotdot_name, True)
                 else:
-                    if value == None:
-                        value = True
-                    args[arg_name] = value
-                    args.remain = s[i:]
-                    break
-            elif state == State.parse_int:
+                    dotdot_name += c
+            elif state == State.parse_value:
                 if c == None:
-                    args[arg_name] = value
+                    args[arg_name] = istate.finish()
                     break
-                elif c == ' ':
-                    if extra_space == False and len(value) == 0:
-                        extra_space = True
-                    else:
-                        if extra_space and len(value) == 0:
-                            args.remain = s[i:]
-                        else:
-                            args.remain = s[i+1:]
-                        if len(value) == 0:
-                            value = "1"
-                        args[arg_name] = int(value)
-                        break
                 elif c == '.':
-                    if len(value) == 0:
-                        value = "1"
-                    args[arg_name] = int(value)
+                    args[arg_name] = istate.finish()
                     state = State.found_dot
-                elif c in ['-','0','1','2','3','4','5','6','7','8','9']:
-                    value = value + c
-                else:
-                    if len(value) == 0:
-                        value = "1"
-                    args[arg_name] = int(value)
-                    args.remain = s[i:]
-                    break
-            elif state == State.parse_str:
-                if c == None:
-                    args[arg_name] = value
-                    break
+                elif istate.isLegal(c):
+                    pass
                 elif c == ' ':
-                    if extra_space == False and len(value) == 0:
-                        extra_space = True
-                    else:
-                        if extra_space and len(value) == 0:
-                            args.remain = s[i:]
-                        else:
-                            args.remain = s[i+1:]
-                        args[arg_name] = value
-                        break
-                elif c == '.':
-                    args[arg_name] = value
-                    state = State.found_dot
+                    e = istate.parseSpace()
+                    if e != None:
+                        i = i + e - 1
+                        args[arg_name] = istate.finish()
+                        state = State.init
                 else:
-                    value = value + c
-            elif state == State.parse_space_str:
-                if c == None:
-                    args[arg_name] = value
+                    args[arg_name] = istate.finish()
                     break
-                elif c == ' ':
-                    if extra_space == False and len(value) == 0:
-                        extra_space = True
-                    else:
-                        value = value + c
-                elif c == '.':
-                    args[arg_name] = value
-                    state = State.found_dot
-                else:
-                    value = value + c
-
-
+        args.remain = s[i:]
 
         return args
