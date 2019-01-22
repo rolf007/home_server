@@ -56,7 +56,6 @@ class VlcThread():
         return out
 
     def remote_control(self, cmd):
-        print("foo: '%s'" % cmd)
         print("fooascii: '%s'" % ascii(cmd))
         # this fails if cmd contains non-ascii
         self.p.stdin.write(bytes(cmd+"\n", "ascii"))
@@ -229,6 +228,22 @@ class MusicCollection():
         best_score = total_score[a_min]
         return [url for url, score in total_score.items() if score == best_score]
 
+    def getPrettyName(self, url):
+        if url in self.music_collection:
+            track = self.music_collection[url]
+            artist = track["artist"] if "artist" in track else None
+            title = track["title"] if "title" in track else None
+            if title == None and artist == None:
+                return "unknown"
+            elif title == None:
+                return artist
+            elif artist == None:
+                return title
+            else:
+                return "%s - %s" % (artist, title)
+        else:
+            return "unknown2"
+
 class MusicServer():
     def __init__(self):
         self.logger = Logger("music_server")
@@ -327,7 +342,7 @@ class MusicServer():
         if best_url == None:
             return (404, "Music collection seems to be empty")
         self.enqueue_file(best_url, params)
-        return (200, "playing: '" + artist + " - " + title + "'")
+        return (200, "playing: '" + self.music_collection.getPrettyName(best_url) + "'")
 
     def play_youtube(self, params):
         # https://github.com/rg3/youtube-dl
