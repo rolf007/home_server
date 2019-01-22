@@ -60,14 +60,16 @@ class EmojiParser():
             return i+1, self.shortcuts[query]
         best_match = "?"
         best_score = -1
+        best_len = -1
         for block in self.blocks:
             for u in range(block[0], block[1]):
                 try:
                     name = unicodedata.name(chr(u))
                     score = fuzzy_substring(query.lower(), name.lower())
-                    if score < best_score or best_score == -1:
+                    if score < best_score or best_score == -1 or (score == best_score and len(name) < best_len)
                         best_score = score
                         best_match = chr(u)
+                        best_len = len(name)
                 except:
                     pass
         self.logger(unicodedata.name(best_match))
