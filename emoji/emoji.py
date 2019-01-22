@@ -43,7 +43,7 @@ class EmojiParser():
         ret = ""
         i = 0
         while i < len(text):
-            if text[i] == '.' and i+1 < len(text) and text[i+1].isalpha():
+            if text[i] == ',' and i+1 < len(text) and text[i+1].isalpha():
                 i, name = self.parse(i+1, text)
                 ret += name
             else:
@@ -53,7 +53,7 @@ class EmojiParser():
 
     def parse(self, i, text):
         h = i
-        while i < len(text) and text[i] != '.':
+        while i < len(text) and text[i] != ',':
             i = i + 1
         query = text[h:i]
         if query in self.shortcuts:
@@ -92,7 +92,7 @@ class Emoji():
             if ord(c) >=32 and ord(c) < 254:
                 ret += c;
             else:
-                ret += '.' + unicodedata.name(c) + '.'
+                ret += ',' + unicodedata.name(c) + ','
         return (200, "%s" % ret)
 
     # http://127.0.0.1:5004/send?text=See this. uni.UNICORN FACE.corn. I know you liked it.
