@@ -23,6 +23,10 @@ class Wiki():
         query = params["query"][0]
         resp0 = requests.get("https://en.wikipedia.org/w/api.php?action=opensearch&limit=1&namespace=0&format=json&search=%s" % query)
         json0 = json.loads(resp0.text)
+        if len(json0) < 2:
+            return (404, "no search")
+        if len(json0[1]) < 1:
+            return (404, "no result")
         title = json0[1][0]
         resp1 = requests.get("https://en.wikipedia.org/w/api.php?format=json&action=query&prop=extracts&exintro&explaintext&redirects=1&titles=%s" % title)
         json1 = json.loads(resp1.text)
