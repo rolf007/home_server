@@ -6,6 +6,7 @@ import curses.textpad
 import eyed3
 import os
 import re
+from operator import itemgetter
 
 #configure midnight commander:
 #sudo vi /etc/mc/mc.ext
@@ -35,36 +36,16 @@ class Id3Edit:
 
         self.dir_cursor = 0
         self.dirs = []
+        self.debug = ""
 
 
 
         directory = args.mp3s[0]
-        print ("walk mode")
         for root, dirs, fils in os.walk(directory):
             if len(fils) > 0:
-                print("stuff in: '%s'" % root)
                 self.dirs.append(root)
 
         self.change_dir()
-
-            #for file in fils:
-            #    url = os.path.join(root, file)
-            #    audiofile = eyed3.load(url)
-            #    if audiofile and audiofile.tag:
-            #        self.files.append({"id3": audiofile, "selected": False, "url": url})
-            #break
-        #else:
-        #    for url in args.mp3s:
-        #        # if not os.path.isabs(scan_path):
-        #        #     print("path must be absolute!")
-        #        #     exit(1)
-        #        if not os.path.exists(url):
-        #            print("path '%s' does not exist!" % url)
-        #            exit(1)
-        #        audiofile = eyed3.load(url)
-        #        if audiofile and audiofile.tag:
-        #            self.files.append({"id3": audiofile, "selected": False, "url": url})
-
 
         arrow_state = 0
         c = None
@@ -75,7 +56,7 @@ class Id3Edit:
             if self.menu == "edit":
                 self.draw_edit_menu()
             if c:
-                self.screen.addstr(0, 0, "%s %s" % (str(c), "---"), curses.A_BOLD)
+                self.screen.addstr(0, 0, "%s %s" % (str(c), self.debug), curses.A_BOLD)
             c = self.screen.getch()
             ch = None
             if arrow_state == 0:
@@ -107,6 +88,10 @@ class Id3Edit:
                     ch = '<left>'
                 elif c == 0x31:
                     arrow_state = 3
+                elif c == 0x46:
+                    ch = '<end>'
+                elif c == 0x48:
+                    ch = '<home>'
             elif arrow_state == 3:
                 arrow_state = 0
                 if c == 0x3b:
@@ -144,9 +129,13 @@ class Id3Edit:
                 elif ch == '<up>':
                     if self.main_cursor_y > 0:
                         self.main_cursor_y -= 1
+                    if self.main_scroll > 0 and self.main_cursor_y - self.main_scroll < self.main_scroll_offset:
+                        self.main_scroll -= 1
                 elif ch == '<down>':
-                    if self.main_cursor_y < len(self.files)-1:
+                    if self.main_cursor_y < len(self.files) - 1:
                         self.main_cursor_y += 1
+                    if self.main_scroll < len(self.files) - self.main_max_rows and self.main_cursor_y - self.main_scroll > self.main_max_rows - self.main_scroll_offset - 1:
+                        self.main_scroll += 1
                 elif ch == '<right>':
                     if self.main_cursor_x < self.num_columns - 1:
                         self.main_cursor_x += 1
@@ -168,17 +157,17 @@ class Id3Edit:
                     for f in self.files:
                         f["selected"] = not b
                 elif ch == 'f':
-                    if self.main_cursor_x != 5 and self.main_cursor_x != 6:
-                        self.select_cursor_line_if_none_selected()
+                    if self.main_cursor_x != 5 and self.main_cursor_x != 6 and self.main_cursor_x != 7:
                         self.set_selected_set()
                         self.menu = "fix"
                 elif ch == 'e':
-                    self.select_cursor_line_if_none_selected()
-                    self.set_selected_set()
-                    self.edit_replace_value = self.repr_item(self.get_item(self.main_cursor_x, self.get_first_selected()))
-                    self.menu = "edit"
-                    self.edit_cursor_x0 = 0
-                    self.edit_cursor_x1 = len(self.edit_replace_value)
+                    if self.main_cursor_x != 7:
+                        self.set_selected_set()
+                        self.edit_value = ["(.*)", "\\1"]
+                        self.edit_cursor_y = 1
+                        self.edit_cursor_x0 = [0, 0]
+                        self.edit_cursor_x1 = [len(self.edit_value[0]), len(self.edit_value[1])]
+                        self.menu = "edit"
             elif self.menu == "fix":
                 if ch == '<esc>':
                     self.menu = "main"
@@ -192,45 +181,72 @@ class Id3Edit:
             elif self.menu == "edit":
                 if ch == '<esc>':
                     self.menu = "main"
+                elif ch == '<up>':
+                    if self.edit_cursor_y == 1:
+                        self.edit_cursor_y = 0
+                elif ch == '<down>':
+                    if self.edit_cursor_y == 0:
+                        self.edit_cursor_y = 1
                 elif ch == '<right>':
-                    if self.edit_cursor_x1 < len(self.edit_replace_value):
-                        self.edit_cursor_x1 += 1
-                    self.edit_cursor_x0 = self.edit_cursor_x1
+                    y = self.edit_cursor_y
+                    if self.edit_cursor_x1[y] < len(self.edit_value[y]):
+                        self.edit_cursor_x1[y] += 1
+                    self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
                 elif ch == '<left>':
-                    if self.edit_cursor_x1 > 0:
-                        self.edit_cursor_x1 -= 1
-                    self.edit_cursor_x0 = self.edit_cursor_x1
+                    y = self.edit_cursor_y
+                    if self.edit_cursor_x1[y] > 0:
+                        self.edit_cursor_x1[y] -= 1
+                    self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
                 elif ch == '<s-right>':
-                    if self.edit_cursor_x1 < len(self.edit_replace_value):
-                        self.edit_cursor_x1 += 1
+                    y = self.edit_cursor_y
+                    if self.edit_cursor_x1[y] < len(self.edit_value[y]):
+                        self.edit_cursor_x1[y] += 1
                 elif ch == '<s-left>':
-                    if self.edit_cursor_x1 > 0:
-                        self.edit_cursor_x1 -= 1
+                    y = self.edit_cursor_y
+                    if self.edit_cursor_x1[y] > 0:
+                        self.edit_cursor_x1[y] -= 1
+                elif ch == '<home>':
+                    y = self.edit_cursor_y
+                    self.edit_cursor_x0[y] = 0
+                    self.edit_cursor_x1[y] = 0
+                elif ch == '<end>':
+                    y = self.edit_cursor_y
+                    self.edit_cursor_x0[y] = len(self.edit_value[y])
+                    self.edit_cursor_x1[y] = len(self.edit_value[y])
+                elif ch == '<c-a>':
+                    y = self.edit_cursor_y
+                    self.edit_cursor_x0[y] = 0
+                    self.edit_cursor_x1[y] = len(self.edit_value[y])
                 elif ch == '<cr>':
-                    self.perform_edit(self.edit_replace_value)
+                    self.perform_edit()
                     self.menu = "main"
                 elif ch == '<bs>':
-                    left = min(self.edit_cursor_x0, self.edit_cursor_x1)
-                    right = max(self.edit_cursor_x0, self.edit_cursor_x1)
+                    y = self.edit_cursor_y
+                    left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+                    right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
                     if left != right or left != 0:
                         if left == right:
                             left = left - 1
-                        self.edit_replace_value = self.edit_replace_value[:left] + self.edit_replace_value[right:]
-                        self.edit_cursor_x1 = left
-                        self.edit_cursor_x0 = self.edit_cursor_x1
+                        self.edit_value[y] = self.edit_value[y][:left] + self.edit_value[y][right:]
+                        self.edit_cursor_x1[y] = left
+                        self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
                 elif ch != None and len(ch) == 1 and ch >= ' ' and ch <= '~':
-                    left = min(self.edit_cursor_x0, self.edit_cursor_x1)
-                    right = max(self.edit_cursor_x0, self.edit_cursor_x1)
-                    self.edit_replace_value = self.edit_replace_value[:left] + ch + self.edit_replace_value[right:]
-                    self.edit_cursor_x1 = self.edit_cursor_x1 + 1
-                    self.edit_cursor_x0 = self.edit_cursor_x1
+                    y = self.edit_cursor_y
+                    left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+                    right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+                    self.edit_value[y] = self.edit_value[y][:left] + ch + self.edit_value[y][right:]
+                    self.edit_cursor_x1[y] = left + 1
+                    self.edit_cursor_x0[y] = left + 1
         curses.endwin()
 
     def change_dir(self):
+        self.main_scroll = 0
+        self.main_scroll_offset = 2
+        self.main_max_rows = 8
         self.main_cursor_x = 0
         self.main_cursor_y = 0
         self.fix_cursor_x = 0
-        self.num_columns = 7
+        self.num_columns = 8
         self.screen_end = 0
         self.files = []
         self.menu = "main"
@@ -241,37 +257,54 @@ class Id3Edit:
                 audiofile = eyed3.load(url)
                 if audiofile and audiofile.tag:
                     self.files.append({"id3": audiofile, "selected": False, "url": file})
-            print("file", file)
+            self.files = sorted(self.files, key=itemgetter("url"))
 
-    def repr_item(self, s):
-        if type(s) is str:
-            pass
-        elif type(s) is tuple:
+    def repr_item_help(self, s):
+        if s is None:
+            return "<None>"
+        return s
+
+    def repr_item(self, x, file):
+        if x == 0:
+            return self.repr_item_help(file["url"])
+        elif x == 1:
+            return self.repr_item_help(file["id3"].tag.album)
+        elif x == 2:
+            s = file["id3"].tag.track_num
+            self.debug = "foo: '%s'" % str(s)
             if s[0] and s[1]:
-                s = "%d/%d" % (s[0],s[1])
+                return "%d/%d" % (s[0],s[1])
             elif s[0]:
-                s = "%d" % s[0]
+                return "%d" % s[0]
             else:
                 return '/'
-        elif type(s) is eyed3.id3.Genre:
+        elif x == 3:
+            return self.repr_item_help(file["id3"].tag.artist)
+        elif x == 4:
+            return self.repr_item_help(file["id3"].tag.title)
+        elif x == 5:
+            s = file["id3"].tag.genre
             if s.id != None:
-                s = "(%d)%s" % (s.id, s.name)
+                return "(%d)%s" % (s.id, s.name)
             else:
-                s = "()%s" % s.name
-        elif type(s) is eyed3.core.Date:
-            s = str(s)
-        elif s is None:
-            s = "<None>"
-        else:
-            s = str(type(s))
-        return s;
+                return "()%s" % s.name
+        elif x == 6:
+            s = file["id3"].tag.release_date
+            if s is None:
+                return "<None>"
+            return str(s)
+        elif x == 7:
+            s = file["id3"].tag.version
+            if s is None:
+                return "<None>"
+            return ".".join("%d" % d for d in s)
+        return "unknown column"
 
     def just(self, s, adj):
-        s = self.repr_item(s)
         return s.ljust(adj)[:adj]
 
     def get_column_name(self, x):
-        column_names = ["Url", "Album", "Track_num", "Artist", "Title", "Genre", "Release date"]
+        column_names = ["Url", "Album", "Track_num", "Artist", "Title", "Genre", "Release date", "Version"]
         return column_names[x]
 
     def get_color(self, x, y):
@@ -301,7 +334,8 @@ class Id3Edit:
         title = file["id3"].tag.title
         genre = file["id3"].tag.genre
         release_date = file["id3"].tag.release_date
-        columns = [url, album, track_num, artist, title, genre, release_date]
+        version = file["id3"].tag.version
+        columns = [url, album, track_num, artist, title, genre, release_date, version]
         return columns[x]
 
     def set_item(self, x, file, value):
@@ -311,8 +345,12 @@ class Id3Edit:
             elif x == 1:
                 file["id3"].tag.album = value
             elif x == 2:
+                self.debug="setting track '%s'" % str(value)
                 if '/' in value:
                     file["id3"].tag.track_num = tuple([int(x) for x in value.split('/')])
+                elif value == "":
+                    self.debug="setting to empty"
+                    file["id3"].tag.track_num = (None, None)
                 else:
                     file["id3"].tag.track_num = int(value)
             elif x == 3:
@@ -326,14 +364,6 @@ class Id3Edit:
         except ValueError:
             pass
 
-    def select_cursor_line_if_none_selected(self):
-        any_selected = False
-        for f in self.files:
-            if f["selected"]:
-                any_selected = True
-        if not any_selected:
-            self.files[self.main_cursor_y]["selected"] = not self.files[self.main_cursor_y]["selected"]
-
     def set_selected_set(self):
         self.selected = []
         for f in self.files:
@@ -342,38 +372,30 @@ class Id3Edit:
         if len(self.selected) == 0:
             self.selected = [self.files[self.main_cursor_y]]
 
-    def get_first_selected(self):
-        for f in self.files:
-            if f["selected"]:
-                return f
-        return None
-
     def column_addstr(self, y, x, s, c, color):
-        adj = [30,20,4,10,20,12,8]
+        adj = [30,20,4,10,20,12,8,5]
         for i in range(c):
             x += adj[i]+1
         self.screen.addstr(y, x, "%s " % self.just(s, adj[c]), color)
 
     def draw(self):
-        #27 91 67
-        #27 91 49 59 50 67
-        #27 91 68
-        #27 91 49 59 50 67
         self.screen.clear()
-        y = 2
+        y = 1
+        self.screen.addstr(y, 2, self.just(self.dirs[self.dir_cursor], 120), curses.A_BOLD)
+        y = y + 1
         color = curses.color_pair(1)
         for column in range(self.num_columns):
             self.column_addstr(y, 2, self.get_column_name(column), column, color)
         y = y + 1
-        i = 0
-        for file in self.files:
+        i = self.main_scroll
+        for file in self.files[self.main_scroll:self.main_max_rows+self.main_scroll]:
             for column in range(self.num_columns):
-                self.column_addstr(y, 2, self.repr_item(self.get_item(column, file)), column, self.get_color(column, i))
+                self.column_addstr(y, 2, self.repr_item(column, file), column, self.get_color(column, i))
             i = i + 1
             y = y + 1
         if len(self.files):
             cur_file = self.files[self.main_cursor_y]
-            self.screen.addstr(y, 2, self.just(self.repr_item(self.get_item(self.main_cursor_x, cur_file)), 120), curses.A_BOLD)
+            self.screen.addstr(y, 2, self.just(self.repr_item(self.main_cursor_x, cur_file), 120), curses.A_BOLD)
         y = y + 1
         y = y + 1
         if self.menu == "main":
@@ -445,31 +467,48 @@ class Id3Edit:
     def draw_edit_menu(self):
         y = 5
         x = 7
-        for file in self.selected:
-            current = self.get_item(self.main_cursor_x, file)
-            suggestion = self.edit_replace_value
+        for file in self.selected[0:self.main_max_rows]:
+            current = self.repr_item(self.main_cursor_x, file)
+            try:
+                suggestion = re.sub(self.edit_value[0], self.edit_value[1], current, flags=re.DOTALL)
+            except re.error:
+                suggestion = "<bad regex>"
 
-            self.screen.addstr(y, x, "'%s' -> '%s'" % (self.repr_item(current), self.repr_item(suggestion)), curses.A_BOLD)
+            self.screen.addstr(y, x, "'%s' -> '%s'" % (current, suggestion), curses.A_BOLD)
             y = y + 1
         y = y + 1
-        left = min(self.edit_cursor_x0, self.edit_cursor_x1)
-        right = max(self.edit_cursor_x0, self.edit_cursor_x1)+1
-        v = self.edit_replace_value + " "
-        self.screen.addstr(y, x, v[:left], curses.A_BOLD)
-        self.screen.addstr(y, x+left, v[left:right], curses.A_REVERSE)
-        self.screen.addstr(y, x+right, v[right:], curses.A_BOLD)
+        for z in [0, 1]:
+            v = self.edit_value[z] + " "
+            if self.edit_cursor_y == z:
+                left = min(self.edit_cursor_x0[z], self.edit_cursor_x1[z])
+                right = max(self.edit_cursor_x0[z], self.edit_cursor_x1[z])+1
+                self.screen.addstr(y+z, x, v[:left], curses.A_BOLD)
+                self.screen.addstr(y+z, x+left, v[left:right], curses.A_REVERSE)
+                self.screen.addstr(y+z, x+right, v[right:], curses.A_BOLD)
+            else:
+                self.screen.addstr(y+z, x, v, curses.A_BOLD)
 
     def draw_fix_menu(self):
         y = 5
+        x = 7
         num_selected = len(self.selected)
         j = 0
-        for file in self.selected:
-            current = self.get_item(self.main_cursor_x, file)
+        for file in self.selected[0:self.main_max_rows]:
+            current = self.repr_item(self.main_cursor_x, file)
             suggestion = self.get_suggestion(file, j, num_selected)
 
-            self.screen.addstr(y, 7, "'%s' -> '%s'" % (self.repr_item(current), self.repr_item(suggestion)), curses.A_BOLD)
+            self.screen.addstr(y, x, "'%s' -> '%s'" % (current, suggestion), curses.A_BOLD)
             y = y + 1
             j = j + 1
+
+    def perform_edit(self):
+        for file in self.selected:
+            current = self.repr_item(self.main_cursor_x, file)
+            try:
+                suggestion = re.sub(self.edit_value[0], self.edit_value[1], current, flags=re.DOTALL)
+            except re.error:
+                suggestion = current
+            self.set_item(self.main_cursor_x, file, suggestion)
 
     def perform_fix(self):
         num_selected = len(self.selected)
@@ -478,11 +517,6 @@ class Id3Edit:
             suggestion = self.get_suggestion(file, j, num_selected)
             self.set_item(self.main_cursor_x, file, suggestion)
             j = j + 1
-
-    def perform_edit(self, new_value):
-        for file in self.files:
-            if file["selected"]:
-                self.set_item(self.main_cursor_x, file, new_value)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
