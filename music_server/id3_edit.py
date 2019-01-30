@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+
 import argparse
 import curses
 import curses.textpad
@@ -7,6 +8,11 @@ import eyed3
 import os
 import re
 from operator import itemgetter
+
+import locale
+
+locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+
 
 #configure midnight commander:
 #sudo vi /etc/mc/mc.ext
@@ -20,6 +26,8 @@ class Id3Edit:
             print("argument must be exactly one directory!")
 
         self.screen = curses.initscr()
+        self.screen.refresh()
+        self.height, self.width = self.screen.getmaxyx()
         # don't echo key strokes on the screen
         curses.noecho()
         # read keystrokes instantly, without waiting for enter to ne pressed
@@ -163,7 +171,7 @@ class Id3Edit:
                 elif ch == 'e':
                     if self.main_cursor_x != 7:
                         self.set_selected_set()
-                        self.edit_value = ["(.*)", "\\1"]
+                        self.edit_value = ["(.*)", self.repr_item(self.main_cursor_x, self.selected[0])]
                         self.edit_cursor_y = 1
                         self.edit_cursor_x0 = [0, 0]
                         self.edit_cursor_x1 = [len(self.edit_value[0]), len(self.edit_value[1])]
@@ -271,7 +279,6 @@ class Id3Edit:
             return self.repr_item_help(file["id3"].tag.album)
         elif x == 2:
             s = file["id3"].tag.track_num
-            self.debug = "foo: '%s'" % str(s)
             if s[0] and s[1]:
                 return "%d/%d" % (s[0],s[1])
             elif s[0]:
@@ -345,11 +352,9 @@ class Id3Edit:
             elif x == 1:
                 file["id3"].tag.album = value
             elif x == 2:
-                self.debug="setting track '%s'" % str(value)
                 if '/' in value:
                     file["id3"].tag.track_num = tuple([int(x) for x in value.split('/')])
                 elif value == "":
-                    self.debug="setting to empty"
                     file["id3"].tag.track_num = (None, None)
                 else:
                     file["id3"].tag.track_num = int(value)
@@ -372,27 +377,33 @@ class Id3Edit:
         if len(self.selected) == 0:
             self.selected = [self.files[self.main_cursor_y]]
 
-    def column_addstr(self, y, x, s, c, color):
+    def column_addstr(self, y, x, foo, s, c, color):
         adj = [30,20,4,10,20,12,8,5]
         for i in range(c):
             x += adj[i]+1
-        self.screen.addstr(y, x, "%s " % self.just(s, adj[c]), color)
+        foo.addstr(y, x, (u"%s\u2502" % self.just(s, adj[c])).encode('utf-8'), color)
 
     def draw(self):
         self.screen.clear()
+        self.screen.refresh()
         y = 1
         self.screen.addstr(y, 2, self.just(self.dirs[self.dir_cursor], 120), curses.A_BOLD)
         y = y + 1
         color = curses.color_pair(1)
         for column in range(self.num_columns):
-            self.column_addstr(y, 2, self.get_column_name(column), column, color)
+            self.column_addstr(y, 2, self.screen, self.get_column_name(column), column, color)
         y = y + 1
-        i = self.main_scroll
-        for file in self.files[self.main_scroll:self.main_max_rows+self.main_scroll]:
+        i = 0
+
+
+        self.pad = curses.newpad(15, 200)
+        for file in self.files:
             for column in range(self.num_columns):
-                self.column_addstr(y, 2, self.repr_item(column, file), column, self.get_color(column, i))
+                self.column_addstr(i+1, 0, self.pad, self.repr_item(column, file), column, self.get_color(column, i))
             i = i + 1
             y = y + 1
+        self.pad.refresh(self.main_scroll, 0, 2, 2, 10, 118)
+
         if len(self.files):
             cur_file = self.files[self.main_cursor_y]
             self.screen.addstr(y, 2, self.just(self.repr_item(self.main_cursor_x, cur_file), 120), curses.A_BOLD)
