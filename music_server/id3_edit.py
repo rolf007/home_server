@@ -2,15 +2,12 @@
 
 import argparse
 import curses
-import curses.textpad
 from enum import Enum
 import eyed3
+import locale
 import os
 import re
-import sys
 from operator import itemgetter
-
-import locale
 
 locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
 
@@ -76,6 +73,9 @@ class Id3Edit:
 
         curses.init_pair(12, curses.COLOR_BLACK, 9)
         self.style_edit_help_line_val = curses.color_pair(12)
+
+        curses.init_pair(13, 15, curses.COLOR_GREEN)
+        self.style_fix_ornaments = curses.color_pair(13)
 
         self.dir_cursor = 0
         self.dirs = []
@@ -474,6 +474,7 @@ class Id3Edit:
        elif ch == 'f':
            if self.main_cursor_x != 5 and self.main_cursor_x != 6 and self.main_cursor_x != 7:
                self.set_selected_set()
+               self.fix_scroll = 0
                self.menu = "fix"
        elif ch == 'e':
            if self.main_cursor_x != 7:
@@ -486,9 +487,11 @@ class Id3Edit:
                self.menu = "edit"
 
     def edit_menu_draw(self):
+        h = self.height-8
         w = self.width-10
-        h = 20
-        edit_win = curses.newwin(h,w,5,5)
+        y = 4
+        x = 5
+        edit_win = curses.newwin(h,w,y,x)
         edit_win.addch(0,0,curses.ACS_ULCORNER, self.style_edit_ornaments)
         edit_win.hline(0,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
         edit_win.addch(0,w-1,curses.ACS_URCORNER, self.style_edit_ornaments)
@@ -498,36 +501,52 @@ class Id3Edit:
         edit_win.hline(h-5,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
         edit_win.addch(h-5,w-1,curses.ACS_RTEE, self.style_edit_ornaments)
         edit_win.vline(h-4,0,curses.ACS_VLINE,2, self.style_edit_ornaments)
+        edit_win.addch(h-4,1,'S', self.style_edit_ornaments)
+        edit_win.addch(h-3,1,'R', self.style_edit_ornaments)
+        edit_win.vline(h-4,2,58,2, self.style_edit_ornaments)
         edit_win.vline(h-4,3,curses.ACS_VLINE,2, self.style_edit_ornaments)
         edit_win.vline(h-4,w-1,curses.ACS_VLINE,2, self.style_edit_ornaments)
         edit_win.addch(h-2,0,curses.ACS_LLCORNER, self.style_edit_ornaments)
         edit_win.hline(h-2,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
         edit_win.addch(h-2,w-1,curses.ACS_LRCORNER, self.style_edit_ornaments)
-        y = 5
-        x = 4
-        for file in self.selected[0:self.main_max_rows]:
-            current = self.repr_item(self.main_cursor_x, file)
+        pad_height = max(len(self.selected), h-4)+1
+        edit_pad = curses.newpad(pad_height,w-2)
+        data = []
+        max_len_cur_val = 0
+        for sel in self.selected:
+            cur_val = self.repr_item(self.main_cursor_x, sel)
             try:
-                suggestion = re.sub(self.edit_value[0], self.edit_value[1], current, flags=re.DOTALL)
+                new_val = re.sub(self.edit_value[0], self.edit_value[1], cur_val, flags=re.DOTALL)
             except re.error:
-                suggestion = "<bad regex>"
+                new_val = "<bad regex>"
+            data.append((cur_val, new_val))
+            if len(cur_val) > max_len_cur_val:
+                max_len_cur_val = len(cur_val)
 
-            edit_win.addstr(y, x, "'%s' -> '%s'" % (current, suggestion), curses.A_BOLD)
-            y = y + 1
-        y = y + 1
+        i = 0
+        for cur_val, new_val in data:
+            edit_pad.addstr(i, 0, self.just("%s -> %s" % (self.just(cur_val, max_len_cur_val), new_val), w-2), self.style_edit_ornaments)
+            i = i + 1
+        while i < pad_height-1:
+            edit_pad.addstr(i, 0, self.just("", w-2), self.style_edit_ornaments)
+            i = i + 1
+
+        sr_text_y = h-4
+        sr_text_x = 4
         for z in [0, 1]:
             v = self.edit_value[z] + " "
             if self.edit_cursor_y == z:
                 left = min(self.edit_cursor_x0[z], self.edit_cursor_x1[z])
                 right = max(self.edit_cursor_x0[z], self.edit_cursor_x1[z])+1
-                edit_win.addstr(h-4+z, x, v[:left], self.style_edit_ornaments)
-                edit_win.addstr(h-4+z, x+left, v[left:right], curses.A_REVERSE)
-                edit_win.addstr(h-4+z, x+right, v[right:], self.style_edit_ornaments)
+                edit_win.addstr(sr_text_y+z, sr_text_x, v[:left], self.style_edit_ornaments)
+                edit_win.addstr(sr_text_y+z, sr_text_x+left, v[left:right], curses.A_REVERSE)
+                edit_win.addstr(sr_text_y+z, sr_text_x+right, v[right:], self.style_edit_ornaments)
             else:
-                edit_win.addstr(h-4+z, x, v, self.style_edit_ornaments)
-            edit_win.hline(h-4+z, x+len(v), " ", w-len(v)-5, self.style_edit_ornaments)
+                edit_win.addstr(sr_text_y+z, sr_text_x, v, self.style_edit_ornaments)
+            edit_win.hline(sr_text_y+z, sr_text_x+len(v), " ", w-len(v)-5, self.style_edit_ornaments)
         self.draw_help_line(edit_win, h-1, w, self.style_edit_help_line_val, {"<c-a>": "Select all", "<tab>": "search/replace", "<esc>": "Cancel", "<cr>": "Ok"})
         edit_win.refresh()
+        edit_pad.refresh(self.edit_scroll, 0, y+1, x+1, y+h-6, x+ w-2)
 
     def edit_menu_handle_input(self, ch):
         if ch == '<esc>':
@@ -594,18 +613,55 @@ class Id3Edit:
             self.edit_cursor_x0[y] = left + 1
 
     def fix_menu_draw(self):
-        y = 5
-        x = 7
+        h = self.height-8
+        w = self.width-10
+        y = 4
+        x = 5
+        fix_win = curses.newwin(h,w,y,x)
+        fix_win.addch(0,0,curses.ACS_ULCORNER, self.style_fix_ornaments)
+        fix_win.hline(0,1,curses.ACS_HLINE,w-2, self.style_fix_ornaments)
+        fix_win.addch(0,w-1,curses.ACS_URCORNER, self.style_fix_ornaments)
+        fix_win.vline(1,0,curses.ACS_VLINE,h-6, self.style_fix_ornaments)
+        fix_win.vline(1,w-1,curses.ACS_VLINE,h-6, self.style_fix_ornaments)
+        fix_win.addch(h-5,0,curses.ACS_LTEE, self.style_fix_ornaments)
+        fix_win.hline(h-5,1,curses.ACS_HLINE,w-2, self.style_fix_ornaments)
+        fix_win.addch(h-5,w-1,curses.ACS_RTEE, self.style_fix_ornaments)
+        fix_win.vline(h-4,0,curses.ACS_VLINE,2, self.style_fix_ornaments)
+        fix_win.addch(h-4,1,'S', self.style_fix_ornaments)
+        fix_win.addch(h-3,1,'R', self.style_fix_ornaments)
+        fix_win.vline(h-4,2,58,2, self.style_fix_ornaments)
+        fix_win.vline(h-4,3,curses.ACS_VLINE,2, self.style_fix_ornaments)
+        fix_win.vline(h-4,w-1,curses.ACS_VLINE,2, self.style_fix_ornaments)
+        fix_win.addch(h-2,0,curses.ACS_LLCORNER, self.style_fix_ornaments)
+        fix_win.hline(h-2,1,curses.ACS_HLINE,w-2, self.style_fix_ornaments)
+        fix_win.addch(h-2,w-1,curses.ACS_LRCORNER, self.style_fix_ornaments)
+        pad_height = max(len(self.selected), h-4)+1
+        fix_pad = curses.newpad(pad_height,w-2)
+        data = []
+        max_len_cur_val = 0
         num_selected = len(self.selected)
         j = 0
-        for file in self.selected[0:self.main_max_rows]:
-            current = self.repr_item(self.main_cursor_x, file)
-            suggestion = self.get_suggestion(file, j, num_selected)
-
-            self.screen.addstr(y, x, "'%s' -> '%s'" % (current, suggestion), curses.A_BOLD)
-            y = y + 1
+        for sel in self.selected:
+            cur_val = self.repr_item(self.main_cursor_x, sel)
+            new_val = self.get_suggestion(sel, j, num_selected)
+            data.append((cur_val, new_val))
+            if len(cur_val) > max_len_cur_val:
+                max_len_cur_val = len(cur_val)
             j = j + 1
+
+        i = 0
+        for cur_val, new_val in data:
+            fix_pad.addstr(i, 0, self.just("%s -> %s" % (self.just(cur_val, max_len_cur_val), new_val), w-2), self.style_fix_ornaments)
+            i = i + 1
+        while i < pad_height-1:
+            fix_pad.addstr(i, 0, self.just("", w-2), self.style_fix_ornaments)
+            i = i + 1
+
         self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<left>/<right>": "Select Algo", "<esc>": "Cancel", "<cr>": "Ok"})
+        fix_win.refresh()
+        fix_pad.refresh(self.fix_scroll, 0, y+1, x+1, y+h-6, x+ w-2)
+
+
 
     def fix_menu_handle_input(self, ch):
         if ch == '<esc>':
