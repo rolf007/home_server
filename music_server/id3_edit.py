@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 
-
 import argparse
 import curses
 import curses.textpad
+from enum import Enum
 import eyed3
 import os
 import re
+import sys
 from operator import itemgetter
 
 import locale
 
 locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
-
 
 #configure midnight commander:
 #sudo vi /etc/mc/mc.ext
@@ -25,7 +25,10 @@ class Id3Edit:
         if len(args.mp3s) != 1 or not os.path.isdir(args.mp3s[0]):
             print("argument must be exactly one directory!")
 
-        self.screen = curses.initscr()
+    def main(self, screen):
+        self.running = True
+        self.debug = ""
+        self.screen = screen
         self.screen.refresh()
         self.height, self.width = self.screen.getmaxyx()
         # don't echo key strokes on the screen
@@ -33,20 +36,54 @@ class Id3Edit:
         # read keystrokes instantly, without waiting for enter to ne pressed
         curses.cbreak()
         # enable keypad mode
-        #self.screen.keypad(1)
+        self.screen.keypad(1)
+        # disable drawing of cursor
+        curses.curs_set(0)
         curses.start_color()
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN);
-        curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_BLUE);
-        curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_CYAN);
-        curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLUE);
-        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_WHITE);
-        curses.init_pair(6, curses.COLOR_YELLOW, curses.COLOR_WHITE);
+        #                   fg                  bg
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        self.style_text_cursor = curses.color_pair(1)
+
+        curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        self.style_text_none = curses.color_pair(2)
+
+        curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_CYAN)
+        self.style_text_cursor_selected = curses.color_pair(3)|curses.A_BOLD
+
+        curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLUE)
+        self.style_text_selected = curses.color_pair(4)|curses.A_BOLD
+
+        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        self.style_text_center_cursor = curses.color_pair(5)
+
+        curses.init_pair(6, curses.COLOR_YELLOW, curses.COLOR_WHITE)
+        self.style_text_center_cursor_selected = curses.color_pair(6)|curses.A_BOLD
+
+        curses.init_pair(7, 15, curses.COLOR_BLUE)
+        self.style_ornaments = curses.color_pair(7)
+
+        curses.init_pair(8, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        self.style_dir = curses.color_pair(8)
+
+        curses.init_pair(9, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        self.style_help_line_val = curses.color_pair(9)
+
+        curses.init_pair(10, 15, curses.COLOR_BLACK)
+        self.style_help_line_key = curses.color_pair(10)
+
+        curses.init_pair(11, 15, curses.COLOR_RED)
+        self.style_edit_ornaments = curses.color_pair(11)
+
+        curses.init_pair(12, curses.COLOR_BLACK, 9)
+        self.style_edit_help_line_val = curses.color_pair(12)
 
         self.dir_cursor = 0
         self.dirs = []
-        self.debug = ""
 
-
+        self.num_columns = 8
+        self.pads = []
+        for i in range(self.num_columns):
+            self.pads.append(curses.newpad(5,5))
 
         directory = args.mp3s[0]
         for root, dirs, fils in os.walk(directory):
@@ -54,208 +91,83 @@ class Id3Edit:
                 self.dirs.append(root)
 
         self.change_dir()
+        self.resize()
 
-        arrow_state = 0
         c = None
-        while True:
-            self.screen_end = self.draw()
-            if self.menu == "fix":
-                self.draw_fix_menu()
-            if self.menu == "edit":
-                self.draw_edit_menu()
-            if c:
-                self.screen.addstr(0, 0, "%s %s" % (str(c), self.debug), curses.A_BOLD)
+        while self.running:
+            try:
+                self.draw()
+                if self.menu == "fix":
+                    self.fix_menu_draw()
+                elif self.menu == "edit":
+                    self.edit_menu_draw()
+                elif self.menu == "main":
+                    self.main_menu_draw()
+                if c:
+                    self.screen.addstr(0, 30, "%s %s" % (str(c), self.debug), curses.A_BOLD)
+            except curses.error:
+                pass
             c = self.screen.getch()
+            if c == curses.KEY_RESIZE:
+                self.resize()
             ch = None
-            if arrow_state == 0:
-                if c == 0x1b:
-                    arrow_state = 1
-                elif c == 0x0a:
-                    ch = '<cr>'
-                elif c == 0x7f:
-                    ch = '<bs>'
-                elif c == 0x01:
-                    ch = '<c-a>'
-                else:
-                    ch = chr(c)
-            elif arrow_state == 1:
-                arrow_state = 0
-                if c == 0x1b:
-                    ch = '<esc>'
-                if c == 0x5b:
-                    arrow_state = 2
-            elif arrow_state == 2:
-                arrow_state = 0
-                if c == 0x41:
-                    ch = '<up>'
-                elif c == 0x42:
-                    ch = '<down>'
-                elif c == 0x43:
-                    ch = '<right>'
-                elif c == 0x44:
-                    ch = '<left>'
-                elif c == 0x31:
-                    arrow_state = 3
-                elif c == 0x46:
-                    ch = '<end>'
-                elif c == 0x48:
-                    ch = '<home>'
-            elif arrow_state == 3:
-                arrow_state = 0
-                if c == 0x3b:
-                    arrow_state = 4
-            elif arrow_state == 4:
-                arrow_state = 0
-                if c == 0x32:
-                    arrow_state = 5
-                if c == 0x35:
-                    arrow_state = 6
-            elif arrow_state == 5:
-                arrow_state = 0
-                if c == 0x41:
-                    ch = '<s-up>'
-                elif c == 0x42:
-                    ch = '<s-down>'
-                elif c == 0x43:
-                    ch = '<s-right>'
-                elif c == 0x44:
-                    ch = '<s-left>'
-            elif arrow_state == 6:
-                arrow_state = 0
-                if c == 0x41:
-                    ch = '<c-up>'
-                elif c == 0x42:
-                    ch = '<c-down>'
-                elif c == 0x43:
-                    ch = '<c-right>'
-                elif c == 0x44:
-                    ch = '<c-left>'
+            if c == 0x1b:
+                ch = '<esc>'
+            elif c == 0x09:
+                ch = '<tab>'
+            elif c == 262:
+                ch = '<home>'
+            elif c == 360:
+                ch = '<end>'
+            elif c == 553:
+                ch = '<c-left>'
+            elif c == 568:
+                ch = '<c-right>'
+            elif c == 0x0a:
+                ch = '<cr>'
+            elif c == 0x7f:
+                ch = '<bs>'
+            elif c == 0x01:
+                ch = '<c-a>'
+            elif c == 258:
+                ch = '<down>'
+            elif c == 259:
+                ch = '<up>'
+            elif c == 261:
+                ch = '<right>'
+            elif c == 260:
+                ch = '<left>'
+            else:
+                ch = chr(c)
 
             if self.menu == "main":
-                if ch == 'q':
-                    break
-                elif ch == '<up>':
-                    if self.main_cursor_y > 0:
-                        self.main_cursor_y -= 1
-                    if self.main_scroll > 0 and self.main_cursor_y - self.main_scroll < self.main_scroll_offset:
-                        self.main_scroll -= 1
-                elif ch == '<down>':
-                    if self.main_cursor_y < len(self.files) - 1:
-                        self.main_cursor_y += 1
-                    if self.main_scroll < len(self.files) - self.main_max_rows and self.main_cursor_y - self.main_scroll > self.main_max_rows - self.main_scroll_offset - 1:
-                        self.main_scroll += 1
-                elif ch == '<right>':
-                    if self.main_cursor_x < self.num_columns - 1:
-                        self.main_cursor_x += 1
-                elif ch == '<left>':
-                    if self.main_cursor_x > 0:
-                        self.main_cursor_x -= 1
-                elif ch == 'n':
-                    if self.dir_cursor < len(self.dirs) - 1:
-                        self.dir_cursor += 1
-                        self.change_dir()
-                elif ch == 'p':
-                    if self.dir_cursor > 0:
-                        self.dir_cursor -= 1
-                        self.change_dir()
-                elif ch == ' ':
-                    self.files[self.main_cursor_y]["selected"] = not self.files[self.main_cursor_y]["selected"]
-                elif ch == 'a':
-                    b = self.files[0]["selected"]
-                    for f in self.files:
-                        f["selected"] = not b
-                elif ch == 'f':
-                    if self.main_cursor_x != 5 and self.main_cursor_x != 6 and self.main_cursor_x != 7:
-                        self.set_selected_set()
-                        self.menu = "fix"
-                elif ch == 'e':
-                    if self.main_cursor_x != 7:
-                        self.set_selected_set()
-                        self.edit_value = ["(.*)", self.repr_item(self.main_cursor_x, self.selected[0])]
-                        self.edit_cursor_y = 1
-                        self.edit_cursor_x0 = [0, 0]
-                        self.edit_cursor_x1 = [len(self.edit_value[0]), len(self.edit_value[1])]
-                        self.menu = "edit"
+                self.main_menu_handle_input(ch)
             elif self.menu == "fix":
-                if ch == '<esc>':
-                    self.menu = "main"
-                elif ch == '<right>':
-                    self.fix_cursor_x += 1
-                elif ch == '<left>':
-                    self.fix_cursor_x -= 1
-                elif ch == '<cr>':
-                    self.perform_fix()
-                    self.menu = "main"
+                self.fix_menu_handle_input(ch)
             elif self.menu == "edit":
-                if ch == '<esc>':
-                    self.menu = "main"
-                elif ch == '<up>':
-                    if self.edit_cursor_y == 1:
-                        self.edit_cursor_y = 0
-                elif ch == '<down>':
-                    if self.edit_cursor_y == 0:
-                        self.edit_cursor_y = 1
-                elif ch == '<right>':
-                    y = self.edit_cursor_y
-                    if self.edit_cursor_x1[y] < len(self.edit_value[y]):
-                        self.edit_cursor_x1[y] += 1
-                    self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
-                elif ch == '<left>':
-                    y = self.edit_cursor_y
-                    if self.edit_cursor_x1[y] > 0:
-                        self.edit_cursor_x1[y] -= 1
-                    self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
-                elif ch == '<s-right>':
-                    y = self.edit_cursor_y
-                    if self.edit_cursor_x1[y] < len(self.edit_value[y]):
-                        self.edit_cursor_x1[y] += 1
-                elif ch == '<s-left>':
-                    y = self.edit_cursor_y
-                    if self.edit_cursor_x1[y] > 0:
-                        self.edit_cursor_x1[y] -= 1
-                elif ch == '<home>':
-                    y = self.edit_cursor_y
-                    self.edit_cursor_x0[y] = 0
-                    self.edit_cursor_x1[y] = 0
-                elif ch == '<end>':
-                    y = self.edit_cursor_y
-                    self.edit_cursor_x0[y] = len(self.edit_value[y])
-                    self.edit_cursor_x1[y] = len(self.edit_value[y])
-                elif ch == '<c-a>':
-                    y = self.edit_cursor_y
-                    self.edit_cursor_x0[y] = 0
-                    self.edit_cursor_x1[y] = len(self.edit_value[y])
-                elif ch == '<cr>':
-                    self.perform_edit()
-                    self.menu = "main"
-                elif ch == '<bs>':
-                    y = self.edit_cursor_y
-                    left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
-                    right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
-                    if left != right or left != 0:
-                        if left == right:
-                            left = left - 1
-                        self.edit_value[y] = self.edit_value[y][:left] + self.edit_value[y][right:]
-                        self.edit_cursor_x1[y] = left
-                        self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
-                elif ch != None and len(ch) == 1 and ch >= ' ' and ch <= '~':
-                    y = self.edit_cursor_y
-                    left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
-                    right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
-                    self.edit_value[y] = self.edit_value[y][:left] + ch + self.edit_value[y][right:]
-                    self.edit_cursor_x1[y] = left + 1
-                    self.edit_cursor_x0[y] = left + 1
-        curses.endwin()
+                self.edit_menu_handle_input(ch)
+
+    def resize(self):
+        self.screen.clear()
+        self.height, self.width = self.screen.getmaxyx()
+        self.main_max_rows = self.height-6
+        c2 = 5
+        c6 = 9
+        c7 = 6
+        w = self.width - c2 - c6 - c7 -5*4-1
+        c0 = int(w*20/100+0.2) + 5
+        c1 = int(w*20/100+0.4) + 5
+        c3 = int(w*20/100+0.6) + 5
+        c4 = int(w*20/100+0.8) + 5
+        c5 = self.width - c0 - c1 - c2 - c3 - c4 - c6 - c7-1
+        self.adj = [c0,c1,c2,c3,c4,c5,c6,c7]
 
     def change_dir(self):
         self.main_scroll = 0
         self.main_scroll_offset = 2
-        self.main_max_rows = 8
         self.main_cursor_x = 0
         self.main_cursor_y = 0
         self.fix_cursor_x = 0
-        self.num_columns = 8
-        self.screen_end = 0
         self.files = []
         self.menu = "main"
         self.selected = []
@@ -317,20 +229,20 @@ class Id3Edit:
     def get_color(self, x, y):
         if self.main_cursor_y == y or self.main_cursor_x == x:
             if self.main_cursor_y == y and self.main_cursor_x == x:
-                if self.files[y]["selected"]:
-                    color = curses.color_pair(6)|curses.A_BOLD
+                if y < len(self.files) and self.files[y]["selected"]:
+                    color = self.style_text_center_cursor_selected
                 else:
-                    color = curses.color_pair(5)
+                    color = self.style_text_center_cursor
             else:
-                if self.files[y]["selected"]:
-                    color = curses.color_pair(3)|curses.A_BOLD
+                if y < len(self.files) and self.files[y]["selected"]:
+                    color = self.style_text_cursor_selected
                 else:
-                    color = curses.color_pair(1)
+                    color = self.style_text_cursor
         else:
-            if self.files[y]["selected"]:
-                color = curses.color_pair(4)|curses.A_BOLD
+            if y < len(self.files) and self.files[y]["selected"]:
+                color = self.style_text_selected
             else:
-                color = curses.color_pair(2)
+                color = self.style_text_none
         return color
 
     def get_item(self, x, file):
@@ -377,55 +289,103 @@ class Id3Edit:
         if len(self.selected) == 0:
             self.selected = [self.files[self.main_cursor_y]]
 
-    def column_addstr(self, y, x, foo, s, c, color):
-        adj = [30,20,4,10,20,12,8,5]
-        for i in range(c):
-            x += adj[i]+1
-        foo.addstr(y, x, (u"%s\u2502" % self.just(s, adj[c])).encode('utf-8'), color)
-
     def draw(self):
-        self.screen.clear()
-        self.screen.refresh()
-        y = 1
-        self.screen.addstr(y, 2, self.just(self.dirs[self.dir_cursor], 120), curses.A_BOLD)
-        y = y + 1
-        color = curses.color_pair(1)
+        self.screen.erase()
+        win = curses.newwin(self.height, self.width)
+        win.addch(0,0, curses.ACS_ULCORNER, self.style_ornaments)
+        win.addch(0,1, 60, self.style_ornaments)
+        win.addch(0,2, curses.ACS_HLINE, self.style_ornaments)
+        win.addch(0,self.width-1, curses.ACS_URCORNER, self.style_ornaments)
+        dir_repr = (" %s " % self.dirs[self.dir_cursor])[:self.width-10]
+        dir_repr_len = len(dir_repr)
+        win.hline(0,dir_repr_len+3, curses.ACS_HLINE, self.width-5-dir_repr_len, self.style_ornaments)
+        win.addch(0,self.width-2, 62, self.style_ornaments)
+        win.addstr(0, 3, dir_repr, self.style_dir)
+        color = self.style_text_selected
+        x = 1
         for column in range(self.num_columns):
-            self.column_addstr(y, 2, self.screen, self.get_column_name(column), column, color)
-        y = y + 1
-        i = 0
+            win.addstr(1, x, self.just(self.get_column_name(column), self.adj[column]-1), color)
+            x += self.adj[column]
 
+        x = 0
+        for k in range(self.num_columns + 1):
+            win.vline(1,x,curses.ACS_VLINE,self.height-5,self.style_ornaments)
+            if k < len(self.adj):
+                x += self.adj[k]
+        win.hline(self.main_max_rows+2,1, curses.ACS_HLINE, self.width-2, self.style_ornaments)
+        win.addch(self.main_max_rows+2,0, curses.ACS_LTEE, self.style_ornaments)
+        win.addch(self.main_max_rows+2,self.width-1, curses.ACS_RTEE, self.style_ornaments)
+        win.addch(self.main_max_rows+3,0, curses.ACS_VLINE, self.style_ornaments)
+        win.addch(self.main_max_rows+3,self.width-1, curses.ACS_VLINE, self.style_ornaments)
+        win.addch(self.main_max_rows+4,0, curses.ACS_LLCORNER, self.style_ornaments)
+        win.addch(self.main_max_rows+4,self.width-1, curses.ACS_LRCORNER, self.style_ornaments)
+        win.hline(self.main_max_rows+4,1, curses.ACS_HLINE, self.width-2, self.style_ornaments)
 
-        self.pad = curses.newpad(15, 200)
-        for file in self.files:
-            for column in range(self.num_columns):
-                self.column_addstr(i+1, 0, self.pad, self.repr_item(column, file), column, self.get_color(column, i))
-            i = i + 1
-            y = y + 1
-        self.pad.refresh(self.main_scroll, 0, 2, 2, 10, 118)
+        pad_height = max(len(self.files), self.height-6)+1
+        for i in range(self.num_columns):
+            self.pads[i].resize(pad_height, self.adj[i]-1)
+        column = 0
+        for pad in self.pads:
+            i = 0
+            for file in self.files:
+                pad.addstr(i, 0, self.just(self.repr_item(column, file), self.adj[column]-1), self.get_color(column, i))
+                i = i + 1
+            while i < pad_height-1:
+                pad.addstr(i, 0, self.just("", self.adj[column]-1), self.get_color(column, i))
+                i = i + 1
+            column = column + 1
 
         if len(self.files):
             cur_file = self.files[self.main_cursor_y]
-            self.screen.addstr(y, 2, self.just(self.repr_item(self.main_cursor_x, cur_file), 120), curses.A_BOLD)
-        y = y + 1
-        y = y + 1
-        if self.menu == "main":
-            self.screen.addstr(y, 2, "<space>: toggle select", curses.A_BOLD)
-            y = y + 1
-            self.screen.addstr(y, 2, "a:select all/none", curses.A_BOLD)
-            y = y + 1
-            self.screen.addstr(y, 2, "<up>/<down>/<left>/<right>: cursor", curses.A_BOLD)
-            y = y + 1
-            self.screen.addstr(y, 2, "f: fix id3 for selected column", curses.A_BOLD)
-            y = y + 1
-            self.screen.addstr(y, 2, "e: edit id3 for selected column", curses.A_BOLD)
-            y = y + 1
-            self.screen.addstr(y, 2, "n/p: next/previous dir", curses.A_BOLD)
-            y = y + 1
-            self.screen.addstr(y, 2, "q: quit", curses.A_BOLD)
-            y = y + 1
-            self.screen.addstr(y, 2, "Please select an option...", curses.A_BOLD)
-        return y+1
+            win.addstr(self.main_max_rows+3, 1, self.just(self.repr_item(self.main_cursor_x, cur_file), self.width-2), self.style_text_none)
+        self.screen.refresh()
+        win.refresh()
+        x = 0
+        column = 0
+        for pad in self.pads:
+            pad.refresh(self.main_scroll, 0, 2, x+1, self.height-5, x+self.adj[column]-1)
+            x += self.adj[column]
+            column = column + 1
+
+    def draw_help_line(self, win, y, w, style, help_dict):
+        num_items = len(help_dict)
+        keys_len = 0
+        vals_len = 0
+        for key, val in help_dict.items():
+            keys_len += len(key)
+            vals_len += len(val)
+        extra_room = w - keys_len - vals_len
+        key_len = [0]*num_items
+        val_len = [0]*num_items
+        i = 0
+        if extra_room >= 0:
+            for key, val in help_dict.items():
+                key_len[i] = len(key)
+                val_len[i] = len(val) + int(len(val)*extra_room/vals_len)
+                i = i + 1
+        else:
+            extra_room2 = w - keys_len
+            if extra_room2 >= 0:
+                for key, val in help_dict.items():
+                    key_len[i] = len(key)
+                    val_len[i] = int(len(val) + len(val)*extra_room/vals_len)
+                    i = i + 1
+            else:
+                for key, val in help_dict.items():
+                    key_len[i] = len(key) + int(len(key)*extra_room2/keys_len)
+                    i = i + 1
+        x = 0
+        i = 0
+        for key, val in help_dict.items():
+            win.addstr(y, x, self.just(key, key_len[i]), self.style_help_line_key)
+            x += key_len[i]
+            if i == num_items-1:
+                vl = w-x-1
+            else:
+                vl = val_len[i]
+            win.addstr(y, x, self.just(val, vl), style)
+            x += val_len[i]
+            i = i + 1
 
     def suggest_algo_fs(self, file):
         suggestion = "xx"
@@ -475,9 +435,76 @@ class Id3Edit:
             return self.suggest_algo_track_number(j, num_selected)
         return None
 
-    def draw_edit_menu(self):
+    def main_menu_draw(self):
+        self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<space>": "toggle select", "a": "select all/none", "f": "fix id3 for selected column", "e": "edit id3 for selected column", "n/p": "next/previous dir", "q": "quit"})
+
+    def main_menu_handle_input(self, ch):
+       if ch == 'q':
+           self.running = False
+       elif ch == '<up>':
+           if self.main_cursor_y > 0:
+               self.main_cursor_y -= 1
+           if self.main_scroll > 0 and self.main_cursor_y - self.main_scroll < self.main_scroll_offset:
+               self.main_scroll -= 1
+       elif ch == '<down>':
+           if self.main_cursor_y < len(self.files) - 1:
+               self.main_cursor_y += 1
+           if self.main_scroll < len(self.files) - self.main_max_rows and self.main_cursor_y - self.main_scroll > self.main_max_rows - self.main_scroll_offset - 1:
+               self.main_scroll += 1
+       elif ch == '<right>':
+           if self.main_cursor_x < self.num_columns - 1:
+               self.main_cursor_x += 1
+       elif ch == '<left>':
+           if self.main_cursor_x > 0:
+               self.main_cursor_x -= 1
+       elif ch == 'n':
+           if self.dir_cursor < len(self.dirs) - 1:
+               self.dir_cursor += 1
+               self.change_dir()
+       elif ch == 'p':
+           if self.dir_cursor > 0:
+               self.dir_cursor -= 1
+               self.change_dir()
+       elif ch == ' ':
+           self.files[self.main_cursor_y]["selected"] = not self.files[self.main_cursor_y]["selected"]
+       elif ch == 'a':
+           b = self.files[0]["selected"]
+           for f in self.files:
+               f["selected"] = not b
+       elif ch == 'f':
+           if self.main_cursor_x != 5 and self.main_cursor_x != 6 and self.main_cursor_x != 7:
+               self.set_selected_set()
+               self.menu = "fix"
+       elif ch == 'e':
+           if self.main_cursor_x != 7:
+               self.set_selected_set()
+               self.edit_scroll = 0
+               self.edit_value = ["(.*)", self.repr_item(self.main_cursor_x, self.selected[0])]
+               self.edit_cursor_y = 1
+               self.edit_cursor_x0 = [0, 0]
+               self.edit_cursor_x1 = [len(self.edit_value[0]), len(self.edit_value[1])]
+               self.menu = "edit"
+
+    def edit_menu_draw(self):
+        w = self.width-10
+        h = 20
+        edit_win = curses.newwin(h,w,5,5)
+        edit_win.addch(0,0,curses.ACS_ULCORNER, self.style_edit_ornaments)
+        edit_win.hline(0,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
+        edit_win.addch(0,w-1,curses.ACS_URCORNER, self.style_edit_ornaments)
+        edit_win.vline(1,0,curses.ACS_VLINE,h-6, self.style_edit_ornaments)
+        edit_win.vline(1,w-1,curses.ACS_VLINE,h-6, self.style_edit_ornaments)
+        edit_win.addch(h-5,0,curses.ACS_LTEE, self.style_edit_ornaments)
+        edit_win.hline(h-5,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
+        edit_win.addch(h-5,w-1,curses.ACS_RTEE, self.style_edit_ornaments)
+        edit_win.vline(h-4,0,curses.ACS_VLINE,2, self.style_edit_ornaments)
+        edit_win.vline(h-4,3,curses.ACS_VLINE,2, self.style_edit_ornaments)
+        edit_win.vline(h-4,w-1,curses.ACS_VLINE,2, self.style_edit_ornaments)
+        edit_win.addch(h-2,0,curses.ACS_LLCORNER, self.style_edit_ornaments)
+        edit_win.hline(h-2,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
+        edit_win.addch(h-2,w-1,curses.ACS_LRCORNER, self.style_edit_ornaments)
         y = 5
-        x = 7
+        x = 4
         for file in self.selected[0:self.main_max_rows]:
             current = self.repr_item(self.main_cursor_x, file)
             try:
@@ -485,7 +512,7 @@ class Id3Edit:
             except re.error:
                 suggestion = "<bad regex>"
 
-            self.screen.addstr(y, x, "'%s' -> '%s'" % (current, suggestion), curses.A_BOLD)
+            edit_win.addstr(y, x, "'%s' -> '%s'" % (current, suggestion), curses.A_BOLD)
             y = y + 1
         y = y + 1
         for z in [0, 1]:
@@ -493,13 +520,80 @@ class Id3Edit:
             if self.edit_cursor_y == z:
                 left = min(self.edit_cursor_x0[z], self.edit_cursor_x1[z])
                 right = max(self.edit_cursor_x0[z], self.edit_cursor_x1[z])+1
-                self.screen.addstr(y+z, x, v[:left], curses.A_BOLD)
-                self.screen.addstr(y+z, x+left, v[left:right], curses.A_REVERSE)
-                self.screen.addstr(y+z, x+right, v[right:], curses.A_BOLD)
+                edit_win.addstr(h-4+z, x, v[:left], self.style_edit_ornaments)
+                edit_win.addstr(h-4+z, x+left, v[left:right], curses.A_REVERSE)
+                edit_win.addstr(h-4+z, x+right, v[right:], self.style_edit_ornaments)
             else:
-                self.screen.addstr(y+z, x, v, curses.A_BOLD)
+                edit_win.addstr(h-4+z, x, v, self.style_edit_ornaments)
+            edit_win.hline(h-4+z, x+len(v), " ", w-len(v)-5, self.style_edit_ornaments)
+        self.draw_help_line(edit_win, h-1, w, self.style_edit_help_line_val, {"<c-a>": "Select all", "<tab>": "search/replace", "<esc>": "Cancel", "<cr>": "Ok"})
+        edit_win.refresh()
 
-    def draw_fix_menu(self):
+    def edit_menu_handle_input(self, ch):
+        if ch == '<esc>':
+            self.menu = "main"
+        elif ch == '<tab>':
+            if self.edit_cursor_y == 1:
+                self.edit_cursor_y = 0
+            else:
+                self.edit_cursor_y = 1
+        elif ch == '<up>':
+            if self.edit_scroll > 0:
+                self.edit_scroll -= 1
+        elif ch == '<down>':
+            pass
+        elif ch == '<right>':
+            y = self.edit_cursor_y
+            if self.edit_cursor_x1[y] < len(self.edit_value[y]):
+                self.edit_cursor_x1[y] += 1
+            self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
+        elif ch == '<left>':
+            y = self.edit_cursor_y
+            if self.edit_cursor_x1[y] > 0:
+                self.edit_cursor_x1[y] -= 1
+            self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
+        elif ch == '<c-right>':
+            y = self.edit_cursor_y
+            if self.edit_cursor_x1[y] < len(self.edit_value[y]):
+                self.edit_cursor_x1[y] += 1
+        elif ch == '<c-left>':
+            y = self.edit_cursor_y
+            if self.edit_cursor_x1[y] > 0:
+                self.edit_cursor_x1[y] -= 1
+        elif ch == '<home>':
+            y = self.edit_cursor_y
+            self.edit_cursor_x0[y] = 0
+            self.edit_cursor_x1[y] = 0
+        elif ch == '<end>':
+            y = self.edit_cursor_y
+            self.edit_cursor_x0[y] = len(self.edit_value[y])
+            self.edit_cursor_x1[y] = len(self.edit_value[y])
+        elif ch == '<c-a>':
+            y = self.edit_cursor_y
+            self.edit_cursor_x0[y] = 0
+            self.edit_cursor_x1[y] = len(self.edit_value[y])
+        elif ch == '<cr>':
+            self.perform_edit()
+            self.menu = "main"
+        elif ch == '<bs>':
+            y = self.edit_cursor_y
+            left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            if left != right or left != 0:
+                if left == right:
+                    left = left - 1
+                self.edit_value[y] = self.edit_value[y][:left] + self.edit_value[y][right:]
+                self.edit_cursor_x1[y] = left
+                self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
+        elif ch != None and len(ch) == 1 and ch >= ' ' and ch <= '~':
+            y = self.edit_cursor_y
+            left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            self.edit_value[y] = self.edit_value[y][:left] + ch + self.edit_value[y][right:]
+            self.edit_cursor_x1[y] = left + 1
+            self.edit_cursor_x0[y] = left + 1
+
+    def fix_menu_draw(self):
         y = 5
         x = 7
         num_selected = len(self.selected)
@@ -511,6 +605,18 @@ class Id3Edit:
             self.screen.addstr(y, x, "'%s' -> '%s'" % (current, suggestion), curses.A_BOLD)
             y = y + 1
             j = j + 1
+        self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<left>/<right>": "Select Algo", "<esc>": "Cancel", "<cr>": "Ok"})
+
+    def fix_menu_handle_input(self, ch):
+        if ch == '<esc>':
+            self.menu = "main"
+        elif ch == '<right>':
+            self.fix_cursor_x += 1
+        elif ch == '<left>':
+            self.fix_cursor_x -= 1
+        elif ch == '<cr>':
+            self.perform_fix()
+            self.menu = "main"
 
     def perform_edit(self):
         for file in self.selected:
@@ -534,4 +640,4 @@ if __name__ == '__main__':
     parser.add_argument('mp3s', nargs='+')
     args = parser.parse_args()
     id3edit = Id3Edit(args.mp3s)
-
+    curses.wrapper(id3edit.main)
