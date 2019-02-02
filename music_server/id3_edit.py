@@ -7,6 +7,7 @@ import eyed3
 import locale
 import os
 import re
+import signal
 from operator import itemgetter
 
 locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
@@ -129,6 +130,10 @@ class Id3Edit:
                 ch = '<bs>'
             elif c == 0x01:
                 ch = '<c-a>'
+            elif c == 0x10:
+                ch = '<c-p>'
+            elif c == 0x19:
+                ch = '<c-y>'
             elif c == 258:
                 ch = '<down>'
             elif c == 259:
@@ -436,55 +441,58 @@ class Id3Edit:
         return None
 
     def main_menu_draw(self):
-        self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<space>": "toggle select", "a": "select all/none", "f": "fix id3 for selected column", "e": "edit id3 for selected column", "n/p": "next/previous dir", "q": "quit"})
+        self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<space>": "toggle select", "<c-a>": "select all/none", "f": "fix id3 for selected column", "e": "edit id3 for selected column", "<c-y>": "copy", "n/p": "next/previous dir", "q": "quit"})
 
     def main_menu_handle_input(self, ch):
-       if ch == 'q':
-           self.running = False
-       elif ch == '<up>':
-           if self.main_cursor_y > 0:
-               self.main_cursor_y -= 1
-           if self.main_scroll > 0 and self.main_cursor_y - self.main_scroll < self.main_scroll_offset:
-               self.main_scroll -= 1
-       elif ch == '<down>':
-           if self.main_cursor_y < len(self.files) - 1:
-               self.main_cursor_y += 1
-           if self.main_scroll < len(self.files) - self.main_max_rows and self.main_cursor_y - self.main_scroll > self.main_max_rows - self.main_scroll_offset - 1:
-               self.main_scroll += 1
-       elif ch == '<right>':
-           if self.main_cursor_x < self.num_columns - 1:
-               self.main_cursor_x += 1
-       elif ch == '<left>':
-           if self.main_cursor_x > 0:
-               self.main_cursor_x -= 1
-       elif ch == 'n':
-           if self.dir_cursor < len(self.dirs) - 1:
-               self.dir_cursor += 1
-               self.change_dir()
-       elif ch == 'p':
-           if self.dir_cursor > 0:
-               self.dir_cursor -= 1
-               self.change_dir()
-       elif ch == ' ':
-           self.files[self.main_cursor_y]["selected"] = not self.files[self.main_cursor_y]["selected"]
-       elif ch == 'a':
-           b = self.files[0]["selected"]
-           for f in self.files:
-               f["selected"] = not b
-       elif ch == 'f':
-           if self.main_cursor_x != 5 and self.main_cursor_x != 6 and self.main_cursor_x != 7:
-               self.set_selected_set()
-               self.fix_scroll = 0
-               self.menu = "fix"
-       elif ch == 'e':
-           if self.main_cursor_x != 7:
-               self.set_selected_set()
-               self.edit_scroll = 0
-               self.edit_value = ["(.*)", self.repr_item(self.main_cursor_x, self.selected[0])]
-               self.edit_cursor_y = 1
-               self.edit_cursor_x0 = [0, 0]
-               self.edit_cursor_x1 = [len(self.edit_value[0]), len(self.edit_value[1])]
-               self.menu = "edit"
+        if ch == 'q':
+            self.running = False
+        elif ch == '<up>':
+            if self.main_cursor_y > 0:
+                self.main_cursor_y -= 1
+            if self.main_scroll > 0 and self.main_cursor_y - self.main_scroll < self.main_scroll_offset:
+                self.main_scroll -= 1
+        elif ch == '<down>':
+            if self.main_cursor_y < len(self.files) - 1:
+                self.main_cursor_y += 1
+            if self.main_scroll < len(self.files) - self.main_max_rows and self.main_cursor_y - self.main_scroll > self.main_max_rows - self.main_scroll_offset - 1:
+                self.main_scroll += 1
+        elif ch == '<right>':
+            if self.main_cursor_x < self.num_columns - 1:
+                self.main_cursor_x += 1
+        elif ch == '<left>':
+            if self.main_cursor_x > 0:
+                self.main_cursor_x -= 1
+        elif ch == 'n':
+            if self.dir_cursor < len(self.dirs) - 1:
+                self.dir_cursor += 1
+                self.change_dir()
+        elif ch == 'p':
+            if self.dir_cursor > 0:
+                self.dir_cursor -= 1
+                self.change_dir()
+        elif ch == ' ':
+            self.files[self.main_cursor_y]["selected"] = not self.files[self.main_cursor_y]["selected"]
+        elif ch == '<c-a>':
+            if len(self.files) > 0:
+                b = self.files[0]["selected"]
+                for f in self.files:
+                    f["selected"] = not b
+        elif ch == '<c-y>':
+            self.clipboard = self.repr_item(self.main_cursor_x, self.files[self.main_cursor_y])
+        elif ch == 'f':
+            if self.main_cursor_x != 5 and self.main_cursor_x != 6 and self.main_cursor_x != 7:
+                self.set_selected_set()
+                self.fix_scroll = 0
+                self.menu = "fix"
+        elif ch == 'e':
+            if self.main_cursor_x != 7:
+                self.set_selected_set()
+                self.edit_scroll = 0
+                self.edit_value = ["(.*)", "\\1"]
+                self.edit_cursor_y = 1
+                self.edit_cursor_x0 = [0, 0]
+                self.edit_cursor_x1 = [len(self.edit_value[0]), len(self.edit_value[1])]
+                self.menu = "edit"
 
     def edit_menu_draw(self):
         h = self.height-8
@@ -495,21 +503,24 @@ class Id3Edit:
         edit_win.addch(0,0,curses.ACS_ULCORNER, self.style_edit_ornaments)
         edit_win.hline(0,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
         edit_win.addch(0,w-1,curses.ACS_URCORNER, self.style_edit_ornaments)
-        edit_win.vline(1,0,curses.ACS_VLINE,h-6, self.style_edit_ornaments)
-        edit_win.vline(1,w-1,curses.ACS_VLINE,h-6, self.style_edit_ornaments)
-        edit_win.addch(h-5,0,curses.ACS_LTEE, self.style_edit_ornaments)
-        edit_win.hline(h-5,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
-        edit_win.addch(h-5,w-1,curses.ACS_RTEE, self.style_edit_ornaments)
-        edit_win.vline(h-4,0,curses.ACS_VLINE,2, self.style_edit_ornaments)
-        edit_win.addch(h-4,1,'S', self.style_edit_ornaments)
-        edit_win.addch(h-3,1,'R', self.style_edit_ornaments)
-        edit_win.vline(h-4,2,58,2, self.style_edit_ornaments)
-        edit_win.vline(h-4,3,curses.ACS_VLINE,2, self.style_edit_ornaments)
-        edit_win.vline(h-4,w-1,curses.ACS_VLINE,2, self.style_edit_ornaments)
-        edit_win.addch(h-2,0,curses.ACS_LLCORNER, self.style_edit_ornaments)
-        edit_win.hline(h-2,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
-        edit_win.addch(h-2,w-1,curses.ACS_LRCORNER, self.style_edit_ornaments)
-        pad_height = max(len(self.selected), h-4)+1
+        edit_win.vline(1,0,curses.ACS_VLINE,h-5, self.style_edit_ornaments)
+        edit_win.vline(1,w-1,curses.ACS_VLINE,h-5, self.style_edit_ornaments)
+        edit_win.addch(h-4,0,curses.ACS_LTEE, self.style_edit_ornaments)
+        edit_win.hline(h-4,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
+        edit_win.addch(h-4,w-1,curses.ACS_RTEE, self.style_edit_ornaments)
+        edit_win.vline(h-3,0,curses.ACS_VLINE,2, self.style_edit_ornaments)
+        edit_win.addch(h-3,1,'S', self.style_edit_ornaments)
+        edit_win.addch(h-2,1,'R', self.style_edit_ornaments)
+        edit_win.vline(h-3,2,58,2, self.style_edit_ornaments)
+        edit_win.vline(h-3,3,curses.ACS_VLINE,2, self.style_edit_ornaments)
+        edit_win.vline(h-3,w-1,curses.ACS_VLINE,2, self.style_edit_ornaments)
+        edit_win.addch(h-1,0,curses.ACS_LLCORNER, self.style_edit_ornaments)
+        edit_win.hline(h-1,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
+        edit_win.addstr(0,int(w/2)-5," Edit Menu ", self.style_fix_ornaments)
+
+        #edit_win.addch(h-1,w-1,curses.ACS_LRCORNER, self.style_edit_ornaments)
+
+        pad_height = max(len(self.selected), h-3)+1
         edit_pad = curses.newpad(pad_height,w-2)
         data = []
         max_len_cur_val = 0
@@ -531,7 +542,7 @@ class Id3Edit:
             edit_pad.addstr(i, 0, self.just("", w-2), self.style_edit_ornaments)
             i = i + 1
 
-        sr_text_y = h-4
+        sr_text_y = h-3
         sr_text_x = 4
         for z in [0, 1]:
             v = self.edit_value[z] + " "
@@ -544,9 +555,9 @@ class Id3Edit:
             else:
                 edit_win.addstr(sr_text_y+z, sr_text_x, v, self.style_edit_ornaments)
             edit_win.hline(sr_text_y+z, sr_text_x+len(v), " ", w-len(v)-5, self.style_edit_ornaments)
-        self.draw_help_line(edit_win, h-1, w, self.style_edit_help_line_val, {"<c-a>": "Select all", "<tab>": "search/replace", "<esc>": "Cancel", "<cr>": "Ok"})
+        self.draw_help_line(self.screen, self.height-1, self.width, self.style_edit_help_line_val, {"<c-a>": "Select all", "<tab>": "search/replace", "<esc>": "Cancel", "<cr>": "Ok"})
         edit_win.refresh()
-        edit_pad.refresh(self.edit_scroll, 0, y+1, x+1, y+h-6, x+ w-2)
+        edit_pad.refresh(self.edit_scroll, 0, y+1, x+1, y+h-5, x+ w-2)
 
     def edit_menu_handle_input(self, ch):
         if ch == '<esc>':
@@ -591,6 +602,18 @@ class Id3Edit:
             y = self.edit_cursor_y
             self.edit_cursor_x0[y] = 0
             self.edit_cursor_x1[y] = len(self.edit_value[y])
+        elif ch == '<c-y>':
+            y = self.edit_cursor_y
+            left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            self.clipboard = self.edit_value[y][left:right]
+        elif ch == '<c-p>':
+            y = self.edit_cursor_y
+            left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            self.edit_value[y] = self.edit_value[y][:left] + self.clipboard + self.edit_value[y][right:]
+            self.edit_cursor_x1[y] = left + len(self.clipboard)
+            self.edit_cursor_x0[y] = left + len(self.clipboard)
         elif ch == '<cr>':
             self.perform_edit()
             self.menu = "main"
@@ -621,21 +644,22 @@ class Id3Edit:
         fix_win.addch(0,0,curses.ACS_ULCORNER, self.style_fix_ornaments)
         fix_win.hline(0,1,curses.ACS_HLINE,w-2, self.style_fix_ornaments)
         fix_win.addch(0,w-1,curses.ACS_URCORNER, self.style_fix_ornaments)
-        fix_win.vline(1,0,curses.ACS_VLINE,h-6, self.style_fix_ornaments)
-        fix_win.vline(1,w-1,curses.ACS_VLINE,h-6, self.style_fix_ornaments)
-        fix_win.addch(h-5,0,curses.ACS_LTEE, self.style_fix_ornaments)
-        fix_win.hline(h-5,1,curses.ACS_HLINE,w-2, self.style_fix_ornaments)
-        fix_win.addch(h-5,w-1,curses.ACS_RTEE, self.style_fix_ornaments)
-        fix_win.vline(h-4,0,curses.ACS_VLINE,2, self.style_fix_ornaments)
-        fix_win.addch(h-4,1,'S', self.style_fix_ornaments)
-        fix_win.addch(h-3,1,'R', self.style_fix_ornaments)
-        fix_win.vline(h-4,2,58,2, self.style_fix_ornaments)
-        fix_win.vline(h-4,3,curses.ACS_VLINE,2, self.style_fix_ornaments)
-        fix_win.vline(h-4,w-1,curses.ACS_VLINE,2, self.style_fix_ornaments)
-        fix_win.addch(h-2,0,curses.ACS_LLCORNER, self.style_fix_ornaments)
-        fix_win.hline(h-2,1,curses.ACS_HLINE,w-2, self.style_fix_ornaments)
-        fix_win.addch(h-2,w-1,curses.ACS_LRCORNER, self.style_fix_ornaments)
-        pad_height = max(len(self.selected), h-4)+1
+        fix_win.vline(1,0,curses.ACS_VLINE,h-4, self.style_fix_ornaments)
+        fix_win.vline(1,w-1,curses.ACS_VLINE,h-4, self.style_fix_ornaments)
+        fix_win.addch(h-3,0,curses.ACS_LTEE, self.style_fix_ornaments)
+        fix_win.hline(h-3,1,curses.ACS_HLINE,w-2, self.style_fix_ornaments)
+        fix_win.addch(h-3,w-1,curses.ACS_RTEE, self.style_fix_ornaments)
+        fix_win.vline(h-2,0,curses.ACS_VLINE,1, self.style_fix_ornaments)
+        fix_win.addstr(h-2,1,'Algo', self.style_fix_ornaments)
+        fix_win.addch(h-2,5,58, self.style_fix_ornaments)
+        fix_win.addch(h-2,6,curses.ACS_VLINE, self.style_fix_ornaments)
+        fix_win.vline(h-2,w-1,curses.ACS_VLINE,1, self.style_fix_ornaments)
+        fix_win.addch(h-1,0,curses.ACS_LLCORNER, self.style_fix_ornaments)
+        fix_win.hline(h-1,1,curses.ACS_HLINE,w-2, self.style_fix_ornaments)
+        #fix_win.addch(h-2,w-1,curses.ACS_LRCORNER, self.style_fix_ornaments)
+        fix_win.addstr(0,int(w/2)-5," Fix Menu ", self.style_fix_ornaments)
+
+        pad_height = max(len(self.selected), h-2)+1
         fix_pad = curses.newpad(pad_height,w-2)
         data = []
         max_len_cur_val = 0
@@ -657,9 +681,9 @@ class Id3Edit:
             fix_pad.addstr(i, 0, self.just("", w-2), self.style_fix_ornaments)
             i = i + 1
 
-        self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<left>/<right>": "Select Algo", "<esc>": "Cancel", "<cr>": "Ok"})
+        self.draw_help_line(self.screen, self.height-1, self.width, self.style_fix_ornaments, {"<left>/<right>": "Select Algo", "<esc>": "Cancel", "<cr>": "Ok"})
         fix_win.refresh()
-        fix_pad.refresh(self.fix_scroll, 0, y+1, x+1, y+h-6, x+ w-2)
+        fix_pad.refresh(self.fix_scroll, 0, y+1, x+1, y+h-4, x+ w-2)
 
 
 
@@ -696,4 +720,6 @@ if __name__ == '__main__':
     parser.add_argument('mp3s', nargs='+')
     args = parser.parse_args()
     id3edit = Id3Edit(args.mp3s)
+    s = signal.signal(signal.SIGINT, signal.SIG_IGN)
     curses.wrapper(id3edit.main)
+    s = signal.signal(signal.SIGINT, signal.SIG_IGN)
