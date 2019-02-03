@@ -75,9 +75,6 @@ class Id3Edit:
         curses.init_pair(12, curses.COLOR_BLACK, 9)
         self.style_edit_help_line_val = curses.color_pair(12)
 
-        curses.init_pair(13, 15, curses.COLOR_GREEN)
-        self.style_fix_ornaments = curses.color_pair(13)
-
         self.dir_cursor = 0
         self.dirs = []
 
@@ -98,9 +95,7 @@ class Id3Edit:
         while self.running:
             try:
                 self.draw()
-                if self.menu == "fix":
-                    self.fix_menu_draw()
-                elif self.menu == "edit":
+                if self.menu == "edit":
                     self.edit_menu_draw()
                 elif self.menu == "main":
                     self.main_menu_draw()
@@ -120,6 +115,8 @@ class Id3Edit:
                 ch = '<home>'
             elif c == 360:
                 ch = '<end>'
+            elif c == 353:
+                ch = '<s-tab>'
             elif c == 553:
                 ch = '<c-left>'
             elif c == 568:
@@ -147,8 +144,6 @@ class Id3Edit:
 
             if self.menu == "main":
                 self.main_menu_handle_input(ch)
-            elif self.menu == "fix":
-                self.fix_menu_handle_input(ch)
             elif self.menu == "edit":
                 self.edit_menu_handle_input(ch)
 
@@ -172,7 +167,6 @@ class Id3Edit:
         self.main_scroll_offset = 2
         self.main_cursor_x = 0
         self.main_cursor_y = 0
-        self.fix_cursor_x = 0
         self.files = []
         self.menu = "main"
         self.selected = []
@@ -392,56 +386,9 @@ class Id3Edit:
             x += val_len[i]
             i = i + 1
 
-    def suggest_algo_fs(self, file):
-        suggestion = "xx"
-        if self.fix_cursor_x >= 0:
-            filename_items = re.split("[ _]-[ _]", file["url"])
-            if self.fix_cursor_x < len(filename_items):
-                suggestion = filename_items[self.fix_cursor_x]
-            else:
-                suggestion = filename_items[-1]
-        else:
-            path = str(os.getcwd()).split('/')
-            if -self.fix_cursor_x < len(path):
-                suggestion = path[self.fix_cursor_x]
-            else:
-                suggestion = "foo"
-        return suggestion
-
-    def suggest_algo_from_id3(self, file):
-        artist = self.get_item(3, file)
-        title = self.get_item(4, file)
-        filename, ext = os.path.splitext(file["url"])
-        track = self.get_item(2, file)
-        if track: track = track[0]
-        ret = ""
-        if track:
-            ret += "%02d" % track
-        if artist:
-            if ret:
-                ret += ' - '
-            ret += artist
-        if title:
-            if ret:
-                ret += ' - '
-            ret += title
-        ret += ext
-        return ret
-
-    def suggest_algo_track_number(self, i, n):
-        return "%d/%d" % (i+1,n)
-
-    def get_suggestion(self, file, j, num_selected):
-        if self.main_cursor_x == 0:
-            return self.suggest_algo_from_id3(file)
-        elif self.main_cursor_x == 1 or self.main_cursor_x == 3 or self.main_cursor_x == 4:
-            return self.suggest_algo_fs(file)
-        elif self.main_cursor_x == 2:
-            return self.suggest_algo_track_number(j, num_selected)
-        return None
 
     def main_menu_draw(self):
-        self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<space>": "toggle select", "<c-a>": "select all/none", "f": "fix id3 for selected column", "e": "edit id3 for selected column", "<c-y>": "copy", "n/p": "next/previous dir", "q": "quit"})
+        self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<space>": "toggle select", "<c-a>": "select all/none", "e": "edit id3 for selected column", "<c-y>": "copy", "n/p": "next/previous dir", "q": "quit"})
 
     def main_menu_handle_input(self, ch):
         if ch == 'q':
@@ -479,20 +426,46 @@ class Id3Edit:
                     f["selected"] = not b
         elif ch == '<c-y>':
             self.clipboard = self.repr_item(self.main_cursor_x, self.files[self.main_cursor_y])
-        elif ch == 'f':
-            if self.main_cursor_x != 5 and self.main_cursor_x != 6 and self.main_cursor_x != 7:
-                self.set_selected_set()
-                self.fix_scroll = 0
-                self.menu = "fix"
         elif ch == 'e':
             if self.main_cursor_x != 7:
                 self.set_selected_set()
                 self.edit_scroll = 0
-                self.edit_value = ["(.*)", "\\1"]
-                self.edit_cursor_y = 1
-                self.edit_cursor_x0 = [0, 0]
-                self.edit_cursor_x1 = [len(self.edit_value[0]), len(self.edit_value[1])]
+                if self.main_cursor_x == 0:
+                    self.edit_value = ["\\u", "(.*)(\.[a-z0-9]+)", "\\c \\r - \\t\\2"]
+                elif self.main_cursor_x == 1:
+                    self.edit_value = ["\\l", "(.*)", "\\d0"]
+                elif self.main_cursor_x == 2:
+                    self.edit_value = ["\\C", "(.*)", "\\C"]
+                elif self.main_cursor_x == 3:
+                    self.edit_value = ["\\u", "(.*)[ _]-[ _](.*)(\.[a-z0-9]+)", "\\1"]
+                elif self.main_cursor_x == 4:
+                    self.edit_value = ["\\u", "(.*)[ _]-[ _](.*)(\.[a-z0-9]+)", "\\2"]
+                elif self.main_cursor_x == 5:
+                    self.edit_value = ["\\g", "(.*)", "\\1"]
+                elif self.main_cursor_x == 6:
+                    self.edit_value = ["\\e", "(.*)", "\\1"]
+                self.edit_cursor_y = 2
+                self.edit_cursor_x0 = [0, 0, 0]
+                self.edit_cursor_x1 = [len(self.edit_value[0]), len(self.edit_value[1]), len(self.edit_value[2])]
                 self.menu = "edit"
+
+    def perorm_regex(self):
+        data = []
+        i = 0
+        for sel in self.selected:
+            cur_val = self.repr_item(self.main_cursor_x, sel)
+            in_val = self.replace_backslash_stuff(self.edit_value[0], sel, i, len(self.selected))
+            search = self.replace_backslash_stuff(self.edit_value[1], sel, i, len(self.selected))
+            replace = self.replace_backslash_stuff(self.edit_value[2], sel, i, len(self.selected))
+            try:
+                if re.match(search, in_val):
+                    new_val = re.sub(search, replace, in_val, flags=re.DOTALL)
+                else:
+                    new_val = replace
+            except re.error:
+                new_val = None
+            data.append((cur_val, new_val))
+        return data
 
     def edit_menu_draw(self):
         h = self.height-8
@@ -503,48 +476,45 @@ class Id3Edit:
         edit_win.addch(0,0,curses.ACS_ULCORNER, self.style_edit_ornaments)
         edit_win.hline(0,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
         edit_win.addch(0,w-1,curses.ACS_URCORNER, self.style_edit_ornaments)
-        edit_win.vline(1,0,curses.ACS_VLINE,h-5, self.style_edit_ornaments)
-        edit_win.vline(1,w-1,curses.ACS_VLINE,h-5, self.style_edit_ornaments)
-        edit_win.addch(h-4,0,curses.ACS_LTEE, self.style_edit_ornaments)
-        edit_win.hline(h-4,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
-        edit_win.addch(h-4,w-1,curses.ACS_RTEE, self.style_edit_ornaments)
-        edit_win.vline(h-3,0,curses.ACS_VLINE,2, self.style_edit_ornaments)
+        edit_win.vline(1,0,curses.ACS_VLINE,h-6, self.style_edit_ornaments)
+        edit_win.vline(1,w-1,curses.ACS_VLINE,h-6, self.style_edit_ornaments)
+        edit_win.addch(h-5,0,curses.ACS_LTEE, self.style_edit_ornaments)
+        edit_win.hline(h-5,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
+        edit_win.addch(h-5,w-1,curses.ACS_RTEE, self.style_edit_ornaments)
+        edit_win.vline(h-4,0,curses.ACS_VLINE,3, self.style_edit_ornaments)
+        edit_win.addch(h-4,1,'I', self.style_edit_ornaments)
         edit_win.addch(h-3,1,'S', self.style_edit_ornaments)
         edit_win.addch(h-2,1,'R', self.style_edit_ornaments)
-        edit_win.vline(h-3,2,58,2, self.style_edit_ornaments)
-        edit_win.vline(h-3,3,curses.ACS_VLINE,2, self.style_edit_ornaments)
-        edit_win.vline(h-3,w-1,curses.ACS_VLINE,2, self.style_edit_ornaments)
+        edit_win.vline(h-4,2,58,3, self.style_edit_ornaments)
+        edit_win.vline(h-4,3,curses.ACS_VLINE,3, self.style_edit_ornaments)
+        edit_win.vline(h-4,w-1,curses.ACS_VLINE,3, self.style_edit_ornaments)
         edit_win.addch(h-1,0,curses.ACS_LLCORNER, self.style_edit_ornaments)
         edit_win.hline(h-1,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
-        edit_win.addstr(0,int(w/2)-5," Edit Menu ", self.style_fix_ornaments)
+        edit_win.addstr(0,int(w/2)-5," Edit Menu ", self.style_edit_ornaments)
 
         #edit_win.addch(h-1,w-1,curses.ACS_LRCORNER, self.style_edit_ornaments)
 
-        pad_height = max(len(self.selected), h-3)+1
+        pad_height = max(len(self.selected), h-4)+1
         edit_pad = curses.newpad(pad_height,w-2)
-        data = []
+        data = self.perorm_regex()
         max_len_cur_val = 0
-        for sel in self.selected:
-            cur_val = self.repr_item(self.main_cursor_x, sel)
-            try:
-                new_val = re.sub(self.edit_value[0], self.edit_value[1], cur_val, flags=re.DOTALL)
-            except re.error:
-                new_val = "<bad regex>"
-            data.append((cur_val, new_val))
+        for cur_val, new_val in data:
             if len(cur_val) > max_len_cur_val:
                 max_len_cur_val = len(cur_val)
 
         i = 0
         for cur_val, new_val in data:
+            if new_val is None:
+                new_val = "<bad regex>"
             edit_pad.addstr(i, 0, self.just("%s -> %s" % (self.just(cur_val, max_len_cur_val), new_val), w-2), self.style_edit_ornaments)
             i = i + 1
         while i < pad_height-1:
             edit_pad.addstr(i, 0, self.just("", w-2), self.style_edit_ornaments)
             i = i + 1
 
-        sr_text_y = h-3
+        sr_text_y = h-4
         sr_text_x = 4
-        for z in [0, 1]:
+        for z in [0, 1, 2]:
             v = self.edit_value[z] + " "
             if self.edit_cursor_y == z:
                 left = min(self.edit_cursor_x0[z], self.edit_cursor_x1[z])
@@ -555,18 +525,21 @@ class Id3Edit:
             else:
                 edit_win.addstr(sr_text_y+z, sr_text_x, v, self.style_edit_ornaments)
             edit_win.hline(sr_text_y+z, sr_text_x+len(v), " ", w-len(v)-5, self.style_edit_ornaments)
-        self.draw_help_line(self.screen, self.height-1, self.width, self.style_edit_help_line_val, {"<c-a>": "Select all", "<tab>": "search/replace", "<esc>": "Cancel", "<cr>": "Ok"})
+        self.draw_help_line(self.screen, self.height-1, self.width, self.style_edit_help_line_val, {"<c-a>": "Select all", "<tab>": "input/search/replace", "<c-y>":"copy", "<c-p>":"paste", "<esc>": "Cancel", "<cr>": "Ok"})
         edit_win.refresh()
-        edit_pad.refresh(self.edit_scroll, 0, y+1, x+1, y+h-5, x+ w-2)
+        edit_pad.refresh(self.edit_scroll, 0, y+1, x+1, y+h-6, x+ w-2)
 
     def edit_menu_handle_input(self, ch):
         if ch == '<esc>':
             self.menu = "main"
         elif ch == '<tab>':
-            if self.edit_cursor_y == 1:
+            self.edit_cursor_y += 1
+            if self.edit_cursor_y == 3:
                 self.edit_cursor_y = 0
-            else:
-                self.edit_cursor_y = 1
+        elif ch == '<s-tab>':
+            self.edit_cursor_y -= 1
+            if self.edit_cursor_y == -1:
+                self.edit_cursor_y = 2
         elif ch == '<up>':
             if self.edit_scroll > 0:
                 self.edit_scroll -= 1
@@ -635,85 +608,35 @@ class Id3Edit:
             self.edit_cursor_x1[y] = left + 1
             self.edit_cursor_x0[y] = left + 1
 
-    def fix_menu_draw(self):
-        h = self.height-8
-        w = self.width-10
-        y = 4
-        x = 5
-        fix_win = curses.newwin(h,w,y,x)
-        fix_win.addch(0,0,curses.ACS_ULCORNER, self.style_fix_ornaments)
-        fix_win.hline(0,1,curses.ACS_HLINE,w-2, self.style_fix_ornaments)
-        fix_win.addch(0,w-1,curses.ACS_URCORNER, self.style_fix_ornaments)
-        fix_win.vline(1,0,curses.ACS_VLINE,h-4, self.style_fix_ornaments)
-        fix_win.vline(1,w-1,curses.ACS_VLINE,h-4, self.style_fix_ornaments)
-        fix_win.addch(h-3,0,curses.ACS_LTEE, self.style_fix_ornaments)
-        fix_win.hline(h-3,1,curses.ACS_HLINE,w-2, self.style_fix_ornaments)
-        fix_win.addch(h-3,w-1,curses.ACS_RTEE, self.style_fix_ornaments)
-        fix_win.vline(h-2,0,curses.ACS_VLINE,1, self.style_fix_ornaments)
-        fix_win.addstr(h-2,1,'Algo', self.style_fix_ornaments)
-        fix_win.addch(h-2,5,58, self.style_fix_ornaments)
-        fix_win.addch(h-2,6,curses.ACS_VLINE, self.style_fix_ornaments)
-        fix_win.vline(h-2,w-1,curses.ACS_VLINE,1, self.style_fix_ornaments)
-        fix_win.addch(h-1,0,curses.ACS_LLCORNER, self.style_fix_ornaments)
-        fix_win.hline(h-1,1,curses.ACS_HLINE,w-2, self.style_fix_ornaments)
-        #fix_win.addch(h-2,w-1,curses.ACS_LRCORNER, self.style_fix_ornaments)
-        fix_win.addstr(0,int(w/2)-5," Fix Menu ", self.style_fix_ornaments)
 
-        pad_height = max(len(self.selected), h-2)+1
-        fix_pad = curses.newpad(pad_height,w-2)
-        data = []
-        max_len_cur_val = 0
-        num_selected = len(self.selected)
-        j = 0
-        for sel in self.selected:
-            cur_val = self.repr_item(self.main_cursor_x, sel)
-            new_val = self.get_suggestion(sel, j, num_selected)
-            data.append((cur_val, new_val))
-            if len(cur_val) > max_len_cur_val:
-                max_len_cur_val = len(cur_val)
-            j = j + 1
-
-        i = 0
-        for cur_val, new_val in data:
-            fix_pad.addstr(i, 0, self.just("%s -> %s" % (self.just(cur_val, max_len_cur_val), new_val), w-2), self.style_fix_ornaments)
-            i = i + 1
-        while i < pad_height-1:
-            fix_pad.addstr(i, 0, self.just("", w-2), self.style_fix_ornaments)
-            i = i + 1
-
-        self.draw_help_line(self.screen, self.height-1, self.width, self.style_fix_ornaments, {"<left>/<right>": "Select Algo", "<esc>": "Cancel", "<cr>": "Ok"})
-        fix_win.refresh()
-        fix_pad.refresh(self.fix_scroll, 0, y+1, x+1, y+h-4, x+ w-2)
-
-
-
-    def fix_menu_handle_input(self, ch):
-        if ch == '<esc>':
-            self.menu = "main"
-        elif ch == '<right>':
-            self.fix_cursor_x += 1
-        elif ch == '<left>':
-            self.fix_cursor_x -= 1
-        elif ch == '<cr>':
-            self.perform_fix()
-            self.menu = "main"
+    def replace_backslash_stuff(self, s, file, e, n):
+        s = s.replace("\\u", self.repr_item(0, file))
+        s = s.replace("\\l", self.repr_item(1, file))
+        track = self.get_item(2, file)
+        s = s.replace("\\c", "%02d" % track[0] if track and track[0] else "")
+        s = s.replace("\\C", "%d/%d" % (e+1, n))
+        s = s.replace("\\r", self.repr_item(3, file))
+        s = s.replace("\\t", self.repr_item(4, file))
+        s = s.replace("\\g", file["id3"].tag.genre.name)
+        genre_id = file["id3"].tag.genre.id
+        s = s.replace("\\G", str(genre_id) if not genre_id is None else "")
+        s = s.replace("\\e", self.repr_item(6, file))
+        d = self.dirs[self.dir_cursor]
+        path = d.split('/')
+        s = s.replace("\\d0", path[-2] if len(path) > 0 else "na")
+        s = s.replace("\\d1", path[-3] if len(path) > 1 else "na")
+        s = s.replace("\\d2", path[-4] if len(path) > 2 else "na")
+        return s
 
     def perform_edit(self):
-        for file in self.selected:
-            current = self.repr_item(self.main_cursor_x, file)
-            try:
-                suggestion = re.sub(self.edit_value[0], self.edit_value[1], current, flags=re.DOTALL)
-            except re.error:
-                suggestion = current
-            self.set_item(self.main_cursor_x, file, suggestion)
+        data = self.perorm_regex()
+        i = 0
+        for sel in self.selected:
+            cur_val, new_val =  data[i]
+            if not new_val is None:
+                self.set_item(self.main_cursor_x, sel, new_val)
+            i = i + 1
 
-    def perform_fix(self):
-        num_selected = len(self.selected)
-        j = 0
-        for file in self.selected:
-            suggestion = self.get_suggestion(file, j, num_selected)
-            self.set_item(self.main_cursor_x, file, suggestion)
-            j = j + 1
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
