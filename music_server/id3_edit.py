@@ -287,6 +287,8 @@ class Id3Edit:
                 self.selected.append(f)
         if len(self.selected) == 0:
             self.selected = [self.files[self.main_cursor_y]]
+            return False
+        return True
 
     def draw(self):
         self.screen.erase()
@@ -428,7 +430,7 @@ class Id3Edit:
             self.clipboard = self.repr_item(self.main_cursor_x, self.files[self.main_cursor_y])
         elif ch == 'e':
             if self.main_cursor_x != 7:
-                self.set_selected_set()
+                ss = self.set_selected_set()
                 self.edit_scroll = 0
                 if self.main_cursor_x == 0:
                     self.edit_value = ["\\u", "(.*)(\.[a-z0-9]+)", "\\c \\r - \\t\\2"]
@@ -444,9 +446,11 @@ class Id3Edit:
                     self.edit_value = ["\\g", "(.*)", "\\1"]
                 elif self.main_cursor_x == 6:
                     self.edit_value = ["\\e", "(.*)", "\\1"]
+                if not ss:
+                    self.edit_value[2] = self.repr_item(self.main_cursor_x, self.selected[0])
                 self.edit_cursor_y = 2
-                self.edit_cursor_x0 = [0, 0, 0]
-                self.edit_cursor_x1 = [len(self.edit_value[0]), len(self.edit_value[1]), len(self.edit_value[2])]
+                self.edit_cursor_x0 = [-1, -1, -1]
+                self.edit_cursor_x1 = [-1, -1, -1]
                 self.menu = "edit"
 
     def perorm_regex(self):
@@ -466,6 +470,13 @@ class Id3Edit:
                 new_val = None
             data.append((cur_val, new_val))
         return data
+
+    def get_left_right(self, y):
+        if self.edit_cursor_x0[y] == -1 or self.edit_cursor_x1[y] == -1:
+            return 0, len(self.edit_value[y])
+        left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+        right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+        return left, right
 
     def edit_menu_draw(self):
         h = self.height-8
@@ -517,11 +528,10 @@ class Id3Edit:
         for z in [0, 1, 2]:
             v = self.edit_value[z] + " "
             if self.edit_cursor_y == z:
-                left = min(self.edit_cursor_x0[z], self.edit_cursor_x1[z])
-                right = max(self.edit_cursor_x0[z], self.edit_cursor_x1[z])+1
+                left, right = self.get_left_right(z)
                 edit_win.addstr(sr_text_y+z, sr_text_x, v[:left], self.style_edit_ornaments)
-                edit_win.addstr(sr_text_y+z, sr_text_x+left, v[left:right], curses.A_REVERSE)
-                edit_win.addstr(sr_text_y+z, sr_text_x+right, v[right:], self.style_edit_ornaments)
+                edit_win.addstr(sr_text_y+z, sr_text_x+left, v[left:right+1], curses.A_REVERSE)
+                edit_win.addstr(sr_text_y+z, sr_text_x+right+1, v[right+1:], self.style_edit_ornaments)
             else:
                 edit_win.addstr(sr_text_y+z, sr_text_x, v, self.style_edit_ornaments)
             edit_win.hline(sr_text_y+z, sr_text_x+len(v), " ", w-len(v)-5, self.style_edit_ornaments)
@@ -547,20 +557,30 @@ class Id3Edit:
             pass
         elif ch == '<right>':
             y = self.edit_cursor_y
-            if self.edit_cursor_x1[y] < len(self.edit_value[y]):
+            if self.edit_cursor_x0[y] == -1 or self.edit_cursor_x1[y] == -1:
+                self.edit_cursor_x1[y] = len(self.edit_value[y])
+            elif self.edit_cursor_x1[y] < len(self.edit_value[y]):
                 self.edit_cursor_x1[y] += 1
             self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
         elif ch == '<left>':
             y = self.edit_cursor_y
-            if self.edit_cursor_x1[y] > 0:
+            if self.edit_cursor_x0[y] == -1 or self.edit_cursor_x1[y] == -1:
+                self.edit_cursor_x1[y] = 0
+            elif self.edit_cursor_x1[y] > 0:
                 self.edit_cursor_x1[y] -= 1
             self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
         elif ch == '<c-right>':
             y = self.edit_cursor_y
-            if self.edit_cursor_x1[y] < len(self.edit_value[y]):
+            if self.edit_cursor_x0[y] == -1 or self.edit_cursor_x1[y] == -1:
+                self.edit_cursor_x0[y] = len(self.edit_value[y])
+                self.edit_cursor_x1[y] = 1
+            elif self.edit_cursor_x1[y] < len(self.edit_value[y]):
                 self.edit_cursor_x1[y] += 1
         elif ch == '<c-left>':
             y = self.edit_cursor_y
+            if self.edit_cursor_x0[y] == -1 or self.edit_cursor_x1[y] == -1:
+                self.edit_cursor_x0[y] = 0
+                self.edit_cursor_x1[y] = len(self.edit_value[y])-1
             if self.edit_cursor_x1[y] > 0:
                 self.edit_cursor_x1[y] -= 1
         elif ch == '<home>':
@@ -573,17 +593,15 @@ class Id3Edit:
             self.edit_cursor_x1[y] = len(self.edit_value[y])
         elif ch == '<c-a>':
             y = self.edit_cursor_y
-            self.edit_cursor_x0[y] = 0
-            self.edit_cursor_x1[y] = len(self.edit_value[y])
+            self.edit_cursor_x0[y] = -1
+            self.edit_cursor_x1[y] = -1
         elif ch == '<c-y>':
             y = self.edit_cursor_y
-            left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
-            right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            left, right = self.get_left_right(y)
             self.clipboard = self.edit_value[y][left:right]
         elif ch == '<c-p>':
             y = self.edit_cursor_y
-            left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
-            right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            left, right = self.get_left_right(y)
             self.edit_value[y] = self.edit_value[y][:left] + self.clipboard + self.edit_value[y][right:]
             self.edit_cursor_x1[y] = left + len(self.clipboard)
             self.edit_cursor_x0[y] = left + len(self.clipboard)
@@ -592,8 +610,7 @@ class Id3Edit:
             self.menu = "main"
         elif ch == '<bs>':
             y = self.edit_cursor_y
-            left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
-            right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            left, right = self.get_left_right(y)
             if left != right or left != 0:
                 if left == right:
                     left = left - 1
@@ -602,8 +619,7 @@ class Id3Edit:
                 self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
         elif ch != None and len(ch) == 1 and ch >= ' ' and ch <= '~':
             y = self.edit_cursor_y
-            left = min(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
-            right = max(self.edit_cursor_x0[y], self.edit_cursor_x1[y])
+            left, right = self.get_left_right(y)
             self.edit_value[y] = self.edit_value[y][:left] + ch + self.edit_value[y][right:]
             self.edit_cursor_x1[y] = left + 1
             self.edit_cursor_x0[y] = left + 1
