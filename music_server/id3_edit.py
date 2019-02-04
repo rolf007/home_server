@@ -6,6 +6,7 @@ from enum import Enum
 import eyed3
 import locale
 import os
+import parser
 import re
 import signal
 from operator import itemgetter
@@ -69,11 +70,14 @@ class Id3Edit:
         curses.init_pair(10, 15, curses.COLOR_BLACK)
         self.style_help_line_key = curses.color_pair(10)
 
-        curses.init_pair(11, 15, curses.COLOR_RED)
+        curses.init_pair(11, 15, curses.COLOR_GREEN)
         self.style_edit_ornaments = curses.color_pair(11)
 
-        curses.init_pair(12, curses.COLOR_BLACK, 9)
+        curses.init_pair(12, curses.COLOR_BLACK, 10)
         self.style_edit_help_line_val = curses.color_pair(12)
+
+        curses.init_pair(13, 15, curses.COLOR_RED)
+        self.style_error = curses.color_pair(13)
 
         self.dir_cursor = 0
         self.dirs = []
@@ -125,6 +129,8 @@ class Id3Edit:
                 ch = '<cr>'
             elif c == 0x7f:
                 ch = '<bs>'
+            elif c == 330:
+                ch = '<del>'
             elif c == 0x01:
                 ch = '<c-a>'
             elif c == 0x10:
@@ -433,9 +439,9 @@ class Id3Edit:
                 ss = self.set_selected_set()
                 self.edit_scroll = 0
                 if self.main_cursor_x == 0:
-                    self.edit_value = ["\\u", "(.*)(\.[a-z0-9]+)", "\\c \\r - \\t\\2"]
+                    self.edit_value = ["\\u", "(.*)(\.[a-z0-9]+)", "\\(\"%s \" % c if c!=\"\" else \"\")\\r - \\t\\2"]
                 elif self.main_cursor_x == 1:
-                    self.edit_value = ["\\l", "(.*)", "\\d0"]
+                    self.edit_value = ["\\l", "(.*)", "\\(d0)"]
                 elif self.main_cursor_x == 2:
                     self.edit_value = ["\\C", "(.*)", "\\C"]
                 elif self.main_cursor_x == 3:
@@ -461,14 +467,25 @@ class Id3Edit:
             in_val = self.replace_backslash_stuff(self.edit_value[0], sel, i, len(self.selected))
             search = self.replace_backslash_stuff(self.edit_value[1], sel, i, len(self.selected))
             replace = self.replace_backslash_stuff(self.edit_value[2], sel, i, len(self.selected))
+            error = None
             try:
                 if re.match(search, in_val):
                     new_val = re.sub(search, replace, in_val, flags=re.DOTALL)
                 else:
+                    error = "no match"
                     new_val = replace
             except re.error:
-                new_val = None
-            data.append((cur_val, new_val))
+                try:
+                    re.match(search, in_val)
+                    error = "bad subst"
+                except re.error:
+                    error = "bad regex"
+                new_val = replace
+            if self.main_cursor_x == 0 and '/' in new_val:
+                error = "'/' in url"
+                new_val = new_val.replace("/", "")
+            data.append((cur_val, new_val, error))
+            i = i + 1
         return data
 
     def get_left_right(self, y):
@@ -493,11 +510,9 @@ class Id3Edit:
         edit_win.hline(h-5,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
         edit_win.addch(h-5,w-1,curses.ACS_RTEE, self.style_edit_ornaments)
         edit_win.vline(h-4,0,curses.ACS_VLINE,3, self.style_edit_ornaments)
-        edit_win.addch(h-4,1,'I', self.style_edit_ornaments)
-        edit_win.addch(h-3,1,'S', self.style_edit_ornaments)
-        edit_win.addch(h-2,1,'R', self.style_edit_ornaments)
-        edit_win.vline(h-4,2,58,3, self.style_edit_ornaments)
-        edit_win.vline(h-4,3,curses.ACS_VLINE,3, self.style_edit_ornaments)
+        edit_win.addstr(h-4,1,'Input:', self.style_edit_help_line_val)
+        edit_win.addstr(h-3,1,'Regex:', self.style_edit_help_line_val)
+        edit_win.addstr(h-2,1,'Subst:', self.style_edit_help_line_val)
         edit_win.vline(h-4,w-1,curses.ACS_VLINE,3, self.style_edit_ornaments)
         edit_win.addch(h-1,0,curses.ACS_LLCORNER, self.style_edit_ornaments)
         edit_win.hline(h-1,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
@@ -509,22 +524,28 @@ class Id3Edit:
         edit_pad = curses.newpad(pad_height,w-2)
         data = self.perorm_regex()
         max_len_cur_val = 0
-        for cur_val, new_val in data:
+        max_len_new_val = 0
+        for cur_val, new_val, error in data:
             if len(cur_val) > max_len_cur_val:
                 max_len_cur_val = len(cur_val)
+            if len(new_val) > max_len_new_val:
+                max_len_new_val = len(new_val)
 
         i = 0
-        for cur_val, new_val in data:
-            if new_val is None:
-                new_val = "<bad regex>"
+        for cur_val, new_val, error in data:
             edit_pad.addstr(i, 0, self.just("%s -> %s" % (self.just(cur_val, max_len_cur_val), new_val), w-2), self.style_edit_ornaments)
+            if error:
+                error_x_pos = max_len_cur_val + max_len_new_val + 5
+                if error_x_pos > w-3-len(error):
+                    error_x_pos = w-3-len(error)
+                edit_pad.addstr(i, error_x_pos, error, self.style_error)
             i = i + 1
         while i < pad_height-1:
             edit_pad.addstr(i, 0, self.just("", w-2), self.style_edit_ornaments)
             i = i + 1
 
         sr_text_y = h-4
-        sr_text_x = 4
+        sr_text_x = 7
         for z in [0, 1, 2]:
             v = self.edit_value[z] + " "
             if self.edit_cursor_y == z:
@@ -617,6 +638,15 @@ class Id3Edit:
                 self.edit_value[y] = self.edit_value[y][:left] + self.edit_value[y][right:]
                 self.edit_cursor_x1[y] = left
                 self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
+        elif ch == '<del>':
+            y = self.edit_cursor_y
+            left, right = self.get_left_right(y)
+            if left != right or left != len(self.edit_value[y]):
+                if left == right:
+                    right = right + 1
+                self.edit_value[y] = self.edit_value[y][:left] + self.edit_value[y][right:]
+                self.edit_cursor_x1[y] = left
+                self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
         elif ch != None and len(ch) == 1 and ch >= ' ' and ch <= '~':
             y = self.edit_cursor_y
             left, right = self.get_left_right(y)
@@ -626,38 +656,82 @@ class Id3Edit:
 
 
     def replace_backslash_stuff(self, s, file, e, n):
-        s = s.replace("\\u", self.repr_item(0, file))
-        s = s.replace("\\l", self.repr_item(1, file))
         track = self.get_item(2, file)
-        s = s.replace("\\c", "%02d" % track[0] if track and track[0] else "")
-        s = s.replace("\\C", "%d/%d" % (e+1, n))
-        s = s.replace("\\r", self.repr_item(3, file))
-        s = s.replace("\\t", self.repr_item(4, file))
-        s = s.replace("\\g", file["id3"].tag.genre.name)
-        genre_id = file["id3"].tag.genre.id
-        s = s.replace("\\G", str(genre_id) if not genre_id is None else "")
-        s = s.replace("\\e", self.repr_item(6, file))
         d = self.dirs[self.dir_cursor]
         path = d.split('/')
-        s = s.replace("\\d0", path[-2] if len(path) > 0 else "na")
-        s = s.replace("\\d1", path[-3] if len(path) > 1 else "na")
-        s = s.replace("\\d2", path[-4] if len(path) > 2 else "na")
-        return s
+        genre_id = file["id3"].tag.genre.id
+        lcls = {
+                "u": self.repr_item(0, file),
+                "l": self.repr_item(1, file),
+                "c": "%02d" % track[0] if track and track[0] else "",
+                "C": "%d/%d" % (e+1, n),
+                "r": self.repr_item(3, file),
+                "t": self.repr_item(4, file),
+                "g": file["id3"].tag.genre.name,
+                "G": str(genre_id) if not genre_id is None else "",
+                "e": self.repr_item(6, file),
+                "d0": path[-2] if len(path) > 1 else "na",
+                "d1": path[-3] if len(path) > 2 else "na",
+                "d2": path[-4] if len(path) > 3 else "na",
+                "d3": path[-5] if len(path) > 4 else "na",
+                "d4": path[-6] if len(path) > 5 else "na",
+                }
+        ret = ""
+        mode = "init"
+        for c in s:
+            if mode == "init":
+                if c == '\\':
+                    mode = "backslash"
+                else:
+                    ret += c
+            elif mode == "backslash":
+                if c in lcls:
+                    ret += lcls[c]
+                    mode = "init"
+                elif c == '(':
+                    mode = "paran"
+                    expr = ""
+                    paran = 0
+                elif c == '0':
+                    mode = "init"
+                else:
+                    ret += "\\"
+                    ret += c
+                    mode = "init"
+            elif mode == "paran":
+                if c == ')':
+                    if paran == 0:
+                        try:
+                            st = parser.expr(expr)
+                            code = st.compile('file.py')
+                            res = eval(code, {}, lcls)
+                            ret += res
+                        except Exception as e:
+                            self.debug = str(e)
+                            pass
+                        mode = "init"
+                    else:
+                        paran -= 1
+                elif c == '(':
+                    paran += 1
+                else:
+                    expr += c
+        return ret
 
     def perform_edit(self):
         data = self.perorm_regex()
         i = 0
         for sel in self.selected:
-            cur_val, new_val =  data[i]
+            cur_val, new_val, error =  data[i]
             if not new_val is None:
                 self.set_item(self.main_cursor_x, sel, new_val)
             i = i + 1
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('mp3s', nargs='+')
-    args = parser.parse_args()
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument('mp3s', nargs='+')
+    args = argparser.parse_args()
     id3edit = Id3Edit(args.mp3s)
     s = signal.signal(signal.SIGINT, signal.SIG_IGN)
     curses.wrapper(id3edit.main)
