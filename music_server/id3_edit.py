@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from copy import deepcopy
 import curses
 from enum import Enum
 import eyed3
@@ -39,24 +40,26 @@ class Id3Edit:
         # disable drawing of cursor
         curses.curs_set(0)
         curses.start_color()
+        i = 0
         #                   fg                  bg
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
-        self.style_text_cursor = curses.color_pair(1)
+        curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        self.style_text_no_cursor = curses.color_pair(1)
 
-        curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_BLUE)
-        self.style_text_none = curses.color_pair(2)
+        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        self.style_text_cursor = curses.color_pair(2)
 
-        curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_CYAN)
-        self.style_text_cursor_selected = curses.color_pair(3)|curses.A_BOLD
+        curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        self.style_text_center_cursor = curses.color_pair(3)
 
-        curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLUE)
+        curses.init_pair(4, 11, curses.COLOR_BLUE)
         self.style_text_selected = curses.color_pair(4)|curses.A_BOLD
 
-        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_WHITE)
-        self.style_text_center_cursor = curses.color_pair(5)
+        curses.init_pair(5, curses.COLOR_YELLOW, curses.COLOR_CYAN)
+        self.style_text_cursor_selected = curses.color_pair(5)|curses.A_BOLD
 
         curses.init_pair(6, curses.COLOR_YELLOW, curses.COLOR_WHITE)
         self.style_text_center_cursor_selected = curses.color_pair(6)|curses.A_BOLD
+
 
         curses.init_pair(7, 15, curses.COLOR_BLUE)
         self.style_ornaments = curses.color_pair(7)
@@ -78,6 +81,16 @@ class Id3Edit:
 
         curses.init_pair(13, 15, curses.COLOR_RED)
         self.style_error = curses.color_pair(13)
+
+        curses.init_pair(14, 15, curses.COLOR_BLUE)
+        self.style_text_modified = curses.color_pair(14)|curses.A_BOLD
+
+        curses.init_pair(15, 15, curses.COLOR_CYAN)
+        self.style_text_cursor_modified = curses.color_pair(15)|curses.A_BOLD
+
+        curses.init_pair(16, 15, curses.COLOR_WHITE)
+        self.style_text_center_cursor_modified = curses.color_pair(16)|curses.A_BOLD
+
 
         self.dir_cursor = 0
         self.dirs = []
@@ -133,6 +146,8 @@ class Id3Edit:
                 ch = '<del>'
             elif c == 0x01:
                 ch = '<c-a>'
+            elif c == 263:
+                ch = '<c-h>'
             elif c == 0x10:
                 ch = '<c-p>'
             elif c == 0x19:
@@ -176,17 +191,29 @@ class Id3Edit:
         self.files = []
         self.menu = "main"
         self.selected = []
-        for root, dirs, fils in os.walk(self.dirs[self.dir_cursor]):
-            for file in fils:
-                url = os.path.join(root, file)
+        root = self.dirs[self.dir_cursor]
+        for file in os.listdir(root):
+            url = os.path.join(root, file)
+            if os.path.isfile(url):
                 audiofile = eyed3.load(url)
                 if audiofile and audiofile.tag:
-                    self.files.append({"id3": audiofile, "selected": False, "url": file})
-            self.files = sorted(self.files, key=itemgetter("url"))
+                    self.files.append({
+                        "id3": audiofile,
+                        "selected": False,
+                        "url": file,
+                        "old_url": file,
+                        "old_album": audiofile.tag.album,
+                        "old_track": audiofile.tag.track_num,
+                        "old_artist": audiofile.tag.artist,
+                        "old_title": audiofile.tag.title,
+                        "old_genre": audiofile.tag.genre,
+                        "old_release": audiofile.tag.release_date,
+                        "old_version": audiofile.tag.version})
+        self.files = sorted(self.files, key=itemgetter("url"))
 
     def repr_item_help(self, s):
         if s is None:
-            return "<None>"
+            return ""
         return s
 
     def repr_item(self, x, file):
@@ -201,7 +228,7 @@ class Id3Edit:
             elif s[0]:
                 return "%d" % s[0]
             else:
-                return '/'
+                return ""
         elif x == 3:
             return self.repr_item_help(file["id3"].tag.artist)
         elif x == 4:
@@ -215,12 +242,12 @@ class Id3Edit:
         elif x == 6:
             s = file["id3"].tag.release_date
             if s is None:
-                return "<None>"
+                return ""
             return str(s)
         elif x == 7:
             s = file["id3"].tag.version
             if s is None:
-                return "<None>"
+                return ""
             return ".".join("%d" % d for d in s)
         return "unknown column"
 
@@ -231,24 +258,45 @@ class Id3Edit:
         column_names = ["Url", "Album", "Track_num", "Artist", "Title", "Genre", "Release date", "Version"]
         return column_names[x]
 
-    def get_color(self, x, y):
+    def get_color(self, x, y, star, modified):
+        selected = y < len(self.files) and self.files[y]["selected"]
         if self.main_cursor_y == y or self.main_cursor_x == x:
             if self.main_cursor_y == y and self.main_cursor_x == x:
-                if y < len(self.files) and self.files[y]["selected"]:
-                    color = self.style_text_center_cursor_selected
-                else:
-                    color = self.style_text_center_cursor
+                cursor = 2
             else:
-                if y < len(self.files) and self.files[y]["selected"]:
-                    color = self.style_text_cursor_selected
-                else:
-                    color = self.style_text_cursor
+                cursor = 1
         else:
-            if y < len(self.files) and self.files[y]["selected"]:
-                color = self.style_text_selected
+            cursor = 0
+
+        if star:
+            if cursor == 2:
+                return self.style_text_center_cursor_modified
+            elif cursor == 1:
+                return self.style_text_cursor_modified
             else:
-                color = self.style_text_none
-        return color
+                return self.style_text_modified
+
+        if selected:
+            if cursor == 2:
+                return self.style_text_center_cursor_selected
+            elif cursor == 1:
+                return self.style_text_cursor_selected
+            else:
+                return self.style_text_selected
+        elif modified:
+            if cursor == 2:
+                return self.style_text_center_cursor_modified
+            elif cursor == 1:
+                return self.style_text_cursor_modified
+            else:
+                return self.style_text_modified
+        else:
+            if cursor == 2:
+                return self.style_text_center_cursor
+            elif cursor == 1:
+                return self.style_text_cursor
+            else:
+                return self.style_text_no_cursor
 
     def get_item(self, x, file):
         url = file["url"]
@@ -335,16 +383,37 @@ class Id3Edit:
         for pad in self.pads:
             i = 0
             for file in self.files:
-                pad.addstr(i, 0, self.just(self.repr_item(column, file), self.adj[column]-1), self.get_color(column, i))
+                text = self.just(self.repr_item(column, file), self.adj[column]-1)
+                if column == 0:
+                    modified = file["url"] != file["old_url"]
+                elif column == 1:
+                    modified = file["id3"].tag.album != file["old_album"]
+                elif column == 2:
+                    modified = file["id3"].tag.track_num != file["old_track"]
+                elif column == 3:
+                    modified = file["id3"].tag.artist != file["old_artist"]
+                elif column == 4:
+                    modified = file["id3"].tag.title != file["old_title"]
+                elif column == 5:
+                    modified = file["id3"].tag.genre != file["old_genre"]
+                elif column == 6:
+                    modified = file["id3"].tag.release_date != file["old_release"]
+                elif column == 7:
+                    modified = file["id3"].tag.version != file["old_version"]
+
+                if modified:
+                    text = text[:-1]
+                    pad.addstr(i, self.adj[column]-2, "*", self.get_color(column, i, True, modified))
+                pad.addstr(i, 0, text, self.get_color(column, i, False, modified))
                 i = i + 1
             while i < pad_height-1:
-                pad.addstr(i, 0, self.just("", self.adj[column]-1), self.get_color(column, i))
+                pad.addstr(i, 0, self.just("", self.adj[column]-1), self.get_color(column, i, False, False))
                 i = i + 1
             column = column + 1
 
         if len(self.files):
             cur_file = self.files[self.main_cursor_y]
-            win.addstr(self.main_max_rows+3, 1, self.just(self.repr_item(self.main_cursor_x, cur_file), self.width-2), self.style_text_none)
+            win.addstr(self.main_max_rows+3, 1, self.just(self.repr_item(self.main_cursor_x, cur_file), self.width-2), self.style_text_no_cursor)
         self.screen.refresh()
         win.refresh()
         x = 0
@@ -439,11 +508,11 @@ class Id3Edit:
                 ss = self.set_selected_set()
                 self.edit_scroll = 0
                 if self.main_cursor_x == 0:
-                    self.edit_value = ["\\u", "(.*)(\.[a-z0-9]+)", "\\(\"%s \" % c if c!=\"\" else \"\")\\r - \\t\\2"]
+                    self.edit_value = ["\\u", "(.*)(\.[a-z0-9]+)", "\\(\"%02d \" % c if c else \"\")\\r\\(\" - \" if r and t else \"\")\\t\\2"]
                 elif self.main_cursor_x == 1:
                     self.edit_value = ["\\l", "(.*)", "\\(d0)"]
                 elif self.main_cursor_x == 2:
-                    self.edit_value = ["\\C", "(.*)", "\\C"]
+                    self.edit_value = ["\\u", "(.*)", "\\(\"%d/%d\"% (num, sel))"]
                 elif self.main_cursor_x == 3:
                     self.edit_value = ["\\u", "(.*)[ _]-[ _](.*)(\.[a-z0-9]+)", "\\1"]
                 elif self.main_cursor_x == 4:
@@ -464,26 +533,33 @@ class Id3Edit:
         i = 0
         for sel in self.selected:
             cur_val = self.repr_item(self.main_cursor_x, sel)
-            in_val = self.replace_backslash_stuff(self.edit_value[0], sel, i, len(self.selected))
-            search = self.replace_backslash_stuff(self.edit_value[1], sel, i, len(self.selected))
-            replace = self.replace_backslash_stuff(self.edit_value[2], sel, i, len(self.selected))
             error = None
+            in_val, e = self.replace_backslash_stuff(self.edit_value[0], sel, i, len(self.selected))
+            if e is not None: error = e
+            search, e = self.replace_backslash_stuff(self.edit_value[1], sel, i, len(self.selected))
+            if e is not None: error = e
+            replace, e = self.replace_backslash_stuff(self.edit_value[2], sel, i, len(self.selected))
+            if e is not None: error = e
             try:
                 if re.match(search, in_val):
                     new_val = re.sub(search, replace, in_val, flags=re.DOTALL)
                 else:
-                    error = "no match"
+                    if error is None: error = "no match"
                     new_val = replace
             except re.error:
                 try:
                     re.match(search, in_val)
-                    error = "bad subst"
+                    if error is None: error = "bad subst"
                 except re.error:
-                    error = "bad regex"
+                    if error is None: error = "bad regex"
                 new_val = replace
+            if error is None: error = e
             if self.main_cursor_x == 0 and '/' in new_val:
                 error = "'/' in url"
                 new_val = new_val.replace("/", "")
+            elif self.main_cursor_x == 0 and not new_val:
+                error = "empty url"
+                new_val = cur_val
             data.append((cur_val, new_val, error))
             i = i + 1
         return data
@@ -555,10 +631,37 @@ class Id3Edit:
                 edit_win.addstr(sr_text_y+z, sr_text_x+right+1, v[right+1:], self.style_edit_ornaments)
             else:
                 edit_win.addstr(sr_text_y+z, sr_text_x, v, self.style_edit_ornaments)
-            edit_win.hline(sr_text_y+z, sr_text_x+len(v), " ", w-len(v)-5, self.style_edit_ornaments)
-        self.draw_help_line(self.screen, self.height-1, self.width, self.style_edit_help_line_val, {"<c-a>": "Select all", "<tab>": "input/search/replace", "<c-y>":"copy", "<c-p>":"paste", "<esc>": "Cancel", "<cr>": "Ok"})
+            edit_win.hline(sr_text_y+z, sr_text_x+len(v), " ", w-len(v)-8, self.style_edit_ornaments)
+        self.draw_help_line(self.screen, self.height-1, self.width, self.style_edit_help_line_val, {"<c-a>": "Select all", "<tab>": "Input/Search/Replace", "<c-y>":"Copy", "<c-p>":"Paste", "<esc>": "Cancel", "<cr>": "Ok"})
+        help_lines = [
+                "u = url",
+                "l = album",
+                "c = track num",
+                "k = ...out of",
+                "r = artist",
+                "t = title",
+                "g = genre name",
+                "G = genre id",
+                "e = release date",
+                "num = selected num",
+                "sel = ...out of",
+                "dn = dir name n",
+                "",
+                "use \\u for one char",
+                "use \\(foo) for expr",
+                "use \\1, \\2, ...",
+                "   for regex backref"]
+        w_help = min(int((w-2)/2), len(max(help_lines, key=len))+0)
+        h_help = min(h-2, len(help_lines))
+        edit_help_win = curses.newwin(h_help,w_help,y+1,x+w-w_help-1)
+        i = 0
+        for i in range(h_help):
+            help_line = help_lines[i]
+            edit_help_win.insstr(i, 0, self.just(help_line, w_help), self.style_edit_help_line_val)
+            i = i +1
         edit_win.refresh()
         edit_pad.refresh(self.edit_scroll, 0, y+1, x+1, y+h-6, x+ w-2)
+        edit_help_win.refresh()
 
     def edit_menu_handle_input(self, ch):
         if ch == '<esc>':
@@ -659,17 +762,19 @@ class Id3Edit:
         track = self.get_item(2, file)
         d = self.dirs[self.dir_cursor]
         path = d.split('/')
-        genre_id = file["id3"].tag.genre.id
+        release = file["id3"].tag.release_date
         lcls = {
-                "u": self.repr_item(0, file),
-                "l": self.repr_item(1, file),
-                "c": "%02d" % track[0] if track and track[0] else "",
-                "C": "%d/%d" % (e+1, n),
-                "r": self.repr_item(3, file),
-                "t": self.repr_item(4, file),
+                "u": file["url"],
+                "l": file["id3"].tag.album,
+                "c": track[0] if track else None,
+                "k": track[1] if track else None,
+                "num": e+1,
+                "sel": n,
+                "r": file["id3"].tag.artist,
+                "t": file["id3"].tag.title,
                 "g": file["id3"].tag.genre.name,
-                "G": str(genre_id) if not genre_id is None else "",
-                "e": self.repr_item(6, file),
+                "G": file["id3"].tag.genre.id,
+                "e": str(release) if release else None,
                 "d0": path[-2] if len(path) > 1 else "na",
                 "d1": path[-3] if len(path) > 2 else "na",
                 "d2": path[-4] if len(path) > 3 else "na",
@@ -678,6 +783,7 @@ class Id3Edit:
                 }
         ret = ""
         mode = "init"
+        error = None
         for c in s:
             if mode == "init":
                 if c == '\\':
@@ -686,7 +792,9 @@ class Id3Edit:
                     ret += c
             elif mode == "backslash":
                 if c in lcls:
-                    ret += lcls[c]
+                    res = lcls[c]
+                    if res is not None:
+                        ret += str(res)
                     mode = "init"
                 elif c == '(':
                     mode = "paran"
@@ -705,18 +813,20 @@ class Id3Edit:
                             st = parser.expr(expr)
                             code = st.compile('file.py')
                             res = eval(code, {}, lcls)
-                            ret += res
+                            if res is not None:
+                                ret += str(res)
                         except Exception as e:
-                            self.debug = str(e)
-                            pass
+                            error = str(e)
                         mode = "init"
                     else:
+                        expr += c
                         paran -= 1
                 elif c == '(':
+                    expr += c
                     paran += 1
                 else:
                     expr += c
-        return ret
+        return ret, error
 
     def perform_edit(self):
         data = self.perorm_regex()
