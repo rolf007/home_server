@@ -620,18 +620,32 @@ class Id3Edit:
             edit_pad.addstr(i, 0, self.just("", w-2), self.style_edit_ornaments)
             i = i + 1
 
-        sr_text_y = h-4
-        sr_text_x = 7
+        irs_text_y = h-4
+        irs_text_x = 7
+        irs_text_w = w-8
+        irs_text_scroll_offset = 5
         for z in [0, 1, 2]:
             v = self.edit_value[z] + " "
+            irs_scroll = 0
+            if self.edit_cursor_x1[z] == -1:
+                irs_scroll = 0
+            elif self.edit_cursor_x1[z] > irs_text_w-irs_text_scroll_offset:
+                irs_scroll = min(self.edit_cursor_x1[z]-irs_text_w+irs_text_scroll_offset, max(0, len(v)-irs_text_w))
+            else:
+                irs_scroll = 0
+            v = v[irs_scroll:irs_text_w+irs_scroll]
             if self.edit_cursor_y == z:
                 left, right = self.get_left_right(z)
-                edit_win.addstr(sr_text_y+z, sr_text_x, v[:left], self.style_edit_ornaments)
-                edit_win.addstr(sr_text_y+z, sr_text_x+left, v[left:right+1], curses.A_REVERSE)
-                edit_win.addstr(sr_text_y+z, sr_text_x+right+1, v[right+1:], self.style_edit_ornaments)
+                left -= irs_scroll
+                right -= irs_scroll
+                edit_win.addstr(irs_text_y+z, irs_text_x, v[:left], self.style_edit_ornaments)
+                edit_win.addstr(irs_text_y+z, irs_text_x+left, v[left:right+1], curses.A_REVERSE)
+                edit_win.addstr(irs_text_y+z, irs_text_x+right+1, v[right+1:], self.style_edit_ornaments)
             else:
-                edit_win.addstr(sr_text_y+z, sr_text_x, v, self.style_edit_ornaments)
-            edit_win.hline(sr_text_y+z, sr_text_x+len(v), " ", w-len(v)-8, self.style_edit_ornaments)
+                edit_win.addstr(irs_text_y+z, irs_text_x, v, self.style_edit_ornaments)
+            vacuum = w-len(v)-8
+            if vacuum > 0:
+                edit_win.hline(irs_text_y+z, irs_text_x+len(v), " ", vacuum, self.style_edit_ornaments)
         self.draw_help_line(self.screen, self.height-1, self.width, self.style_edit_help_line_val, {"<c-a>": "Select all", "<tab>": "Input/Search/Replace", "<c-y>":"Copy", "<c-p>":"Paste", "<esc>": "Cancel", "<cr>": "Ok"})
         help_lines = [
                 "u = url",
