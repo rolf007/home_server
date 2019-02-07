@@ -61,9 +61,12 @@ class Radio():
         self.morse_input += c
 
     def radio_channel(self, channel):
+        self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "radio", {channel})
 
     def radio_play(self):
+        print("playing radio")
+        self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "radio", {})
 
     def podcast(self, program):
@@ -74,6 +77,7 @@ class Radio():
                 print("res = %d %s" % res)
             except requests.ConnectionError as e:
                 print("failed to send %s" % e)
+        self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "multicast", {})
 
     def podcast_next(self):
@@ -82,6 +86,7 @@ class Radio():
             print("res = %d %s" % res)
         except requests.ConnectionError as e:
             print("failed to send %s" % e)
+        self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "multicast", {})
 
     def podcast_prev(self):
@@ -90,6 +95,7 @@ class Radio():
             print("res = %d %s" % res)
         except requests.ConnectionError as e:
             print("failed to send %s" % e)
+        self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "multicast", {})
 
     def multicast_play(self, title):
@@ -100,6 +106,7 @@ class Radio():
                 print("res = %d %s" % res)
             except requests.ConnectionError as e:
                 print("failed to send %s" % e)
+        self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "multicast", {})
 
     def youtube_play(self, query):
@@ -110,6 +117,7 @@ class Radio():
                 print("res = %d %s" % res)
             except requests.ConnectionError as e:
                 print("failed to send %s" % e)
+        self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "multicast", {})
 
     def main_loop(self):

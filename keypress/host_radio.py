@@ -2,7 +2,6 @@
 
 from radio import Radio
 from pygame_inputter import PyGameInputter
-#from raspberry_inputter import RaspberryInputter
 
 inputter = PyGameInputter()
 
