@@ -12,7 +12,25 @@ sys.path.append(os.path.join(home_server_root, "logger"))
 from comm import Comm
 from logger import Logger
 
-class Led():
+class LedController():
+    class Led():
+        def __init__(self):
+            self.anim = [(0,(0,0,0,0))]
+            self.i = 0
+            self.now = (0,0,0,0)
+            self.duration = 0
+            self.time = 0
+            self.src = (0,0,0,0)
+            self.dst = (0,0,0,0)
+
+        def set_anim(self, anim):
+            self.anim = anim
+            self.i = 0
+            self.duration = anim[0][0]
+            self.time = 0
+            self.src = self.now
+            self.dst = anim[0][1]
+
 
     def __init__(self):
         self.logger = Logger("led")
@@ -21,6 +39,8 @@ class Led():
         self.startup_timer = threading.Timer(1, self.startup)
         self.startup_timer.start()
         self.num_leds = 8
+        self.leds = [self.Led(),self.Led(),self.Led(),self.Led(),self.Led(),self.Led(),self.Led(),self.Led()]
+
         self.led_anim = [(0,(0,0,0,0))]*self.num_leds
         self.led_i = [0]*self.num_leds
         self.led_now = [(0,0,0,0)]*self.num_leds
@@ -28,7 +48,6 @@ class Led():
         self.led_time = [0]*self.num_leds
         self.led_src = [(0,0,0,0)]*self.num_leds
         self.led_dst = [(0,0,0,0)]*self.num_leds
-        print(self.led_now)
 
         self.set_leds({"anim": ["mp"]})
         self.set_leds({"anim": ["foo"]})
@@ -36,42 +55,43 @@ class Led():
     def startup(self):
         dt = 0.1
         for led in range(self.num_leds):
-            if self.led_time[led] == 0:
-                power = self.led_dst[led][0]
-                blue = self.led_dst[led][1]
-                green = self.led_dst[led][2]
-                red = self.led_dst[led][3]
+            if self.leds[led].time == 0:
+                power = self.leds[led].dst[0]
+                blue = self.leds[led].dst[1]
+                green = self.leds[led].dst[2]
+                red = self.leds[led].dst[3]
             else:
-                frac = self.led_time[led] / self.led_duration[led]
+                frac = self.leds[led].time / self.leds[led].duration
                 frac = max(0.0, min(frac, 1.0))
-                power = int(self.led_src[led][0]*(1-frac) + self.led_dst[led][0]*(frac))
-                blue = int(self.led_src[led][1]*(1-frac) + self.led_dst[led][1]*(frac))
-                green = int(self.led_src[led][2]*(1-frac) + self.led_dst[led][2]*(frac))
-                red = int(self.led_src[led][3]*(1-frac) + self.led_dst[led][3]*(frac))
-            self.led_now[led] = (power,blue,green,red)
-            if self.led_time[led] < self.led_duration[led]:
-                self.led_time[led] += dt
+                power = int(self.leds[led].src[0]*(1-frac) + self.leds[led].dst[0]*(frac))
+                blue = int(self.leds[led].src[1]*(1-frac) + self.leds[led].dst[1]*(frac))
+                green = int(self.leds[led].src[2]*(1-frac) + self.leds[led].dst[2]*(frac))
+                red = int(self.leds[led].src[3]*(1-frac) + self.leds[led].dst[3]*(frac))
+            self.leds[led].now = (power,blue,green,red)
+            if self.leds[led].time < self.leds[led].duration:
+                self.leds[led].time += dt
             else:
-                self.led_i[led] += 1
-                if len(self.led_anim[led]) > self.led_i[led]:
-                    self.led_time[led]  = 0
-                    print(led, self.led_i)
-                    self.led_duration[led] = self.led_anim[led][self.led_i[led]][0]
-                    self.led_src[led] = self.led_now[led]
-                    self.led_dst[led] = self.led_anim[led][self.led_i[led]][1]
+                self.leds[led].i += 1
+                if len(self.leds[led].anim) > self.leds[led].i:
+                    self.leds[led].time = 0
+                    self.leds[led].duration = self.leds[led].anim[self.leds[led].i][0]
+                    self.leds[led].src = self.leds[led].now
+                    self.leds[led].dst = self.leds[led].anim[self.leds[led].i][1]
 
-        print(self.led_now)
+        print(self.leds[1].now)
         self.startup_timer = threading.Timer(dt, self.startup)
         self.startup_timer.start()
 
     def set_led_anim(self, led_num, anim):
-        self.led_anim[led_num] = anim
-        self.led_i[led_num] = 0
-        self.led_duration[led_num] = anim[0][0]
-        self.led_time[led_num] = 0
-        self.led_src[led_num] = self.led_now[led_num]
-        self.led_dst[led_num] = anim[0][1]
-        #self.led_now[led_num] = anim[0][1]
+        self.leds[led_num].set_anim(anim)
+
+        #self.led_anim[led_num] = anim
+        #self.led_i[led_num] = 0
+        #self.led_duration[led_num] = anim[0][0]
+        #self.led_time[led_num] = 0
+        #self.led_src[led_num] = self.led_now[led_num]
+        #self.led_dst[led_num] = anim[0][1]
+        ##self.led_now[led_num] = anim[0][1]
 
     # http://127.0.0.1:5004/set?anim=mp
     def set_leds(self, params):
@@ -98,10 +118,10 @@ class Led():
         self.comm.shut_down()
 
 if __name__ == '__main__':
-    led = Led()
+    led_controller = LedController()
     try:
         while True:
             time.sleep(2.0)
     except KeyboardInterrupt:
         pass
-    led.shut_down()
+    led_controller.shut_down()
