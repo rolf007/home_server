@@ -92,6 +92,7 @@ class SmsPortal():
             if res[0] != 200:
                 return res
             res = self.comm.call("stream_receiver", "multicast", {})
+            res = self.comm.call("led", "set", {"anim": ["mp"]})
             return res
 
 # http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=p%20metallica
@@ -103,6 +104,7 @@ class SmsPortal():
             if res[0] != 200:
                 return res
             res = self.comm.call("stream_receiver", "multicast", {})
+            res = self.comm.call("led", "set", {"anim": ["mp"]})
             return res
 
     class Cmd_emoji_receive(Cmd):
@@ -142,6 +144,7 @@ class SmsPortal():
         def exe(self, arglist):
             self.args = self.parser.parse_args(arglist)
             res = self.comm.call("stream_receiver", "radio", {"channel": [self.args.remain]})
+            res = self.comm.call("led", "set", {"anim": ["tu"]})
             return res
 
 #web: http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=pod%20prev
@@ -166,6 +169,7 @@ class SmsPortal():
                 return res
 
             res = self.comm.call("stream_receiver", "multicast", {})
+            res = self.comm.call("led", "set", {"anim": ["vi"]})
             return res
 
 #web: http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=wiki%20greta%20thunberg
