@@ -17,7 +17,8 @@ class Radio():
         self.comm = Comm(5000, "player", {}, self.logger)
         self.inputter = inputter
         self.main_menu = KeyPress.mkUnion([
-            KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play("DROID-3 new firmware")),
+            #KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play("DROID-3 new firmware")),
+            KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play("for evigt")),
             KeyPress.compile(".B.b<match>", match=lambda: self.youtube_play("metallica judas kiss")),
             KeyPress.compile(".C.c<match>", match=lambda: self.radio_play()),
             KeyPress.compile(".D.d<match>", match=lambda: self.podcast("d6m")),
@@ -108,7 +109,7 @@ class Radio():
         if title:
             print("requesting '%s'" % title)
             try:
-                res = self.comm.call("music_server", "play", {"title": [title]})
+                res = self.comm.call("music_server", "play", {"artist": ["volbeat"], "title": [title]})
                 print("res = %d %s" % res)
             except requests.ConnectionError as e:
                 print("failed to send %s" % e)
