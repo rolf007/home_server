@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import signal
 import sys
 import subprocess
 import time
@@ -61,7 +62,7 @@ class MulticastReceiver():
         if self.p:
             self.stop()
         print("starting multicast...")
-        self.p = subprocess.Popen("vlc --intf dummy rtp://239.255.12.42", shell=True, stdout=devnull, stderr=devnull)
+        self.p = subprocess.Popen(["vlc", "--intf", "dummy", "rtp://239.255.12.42"], stdout=devnull, stderr=devnull)
 
     def stop(self):
         if self.p == None:
@@ -81,7 +82,7 @@ class RadioReceiver():
                 "p2": 'http://live-icy.gss.dr.dk/A/A04L.mp3.m3u',
                 "p3": 'http://live-icy.gss.dr.dk/A/A05L.mp3.m3u',
                 }
-        self.channel = "24syv"
+        self.channel = "p1"
         self.p = None
 
     def set_channel(self, channel):
@@ -92,9 +93,14 @@ class RadioReceiver():
 
     def start(self):
         print("starting radio...")
+        print("Rolf 0")
         if self.p:
+            print("Rolf 1")
             self.stop()
-        self.p = subprocess.Popen("vlc --intf dummy %s" % self.channels[self.channel], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print("Rolf 2")
+        print("Rolf 3")
+        self.p = subprocess.Popen(["vlc", "--intf", "dummy", self.channels[self.channel]], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print("Rolf 4")
 #https://www.radio24syv.dk/hoer-radio-paa-din-computer
 #24syv vlc http://streaming.radio24syv.dk/pls/24syv_96_IR.pls
 #https://www.dr.dk/hjaelp/digtal-radio/direkte-links-til-dr-radio-paa-nettet
@@ -103,12 +109,16 @@ class RadioReceiver():
 #P3 vlc http://live-icy.gss.dr.dk/A/A05L.mp3.m3u
 
     def stop(self):
+        print("Rolf 5")
         if self.p == None:
+            print("Rolf 6")
             return
         print("stopping radio...")
         self.p.terminate()
+        print("radio stopped!")
         print("vlc radio stopped: %s %s" % self.p.communicate())
         self.p = None
+        print("Rolf 7")
 
 stream_receiver = StreamReceiver()
 try:

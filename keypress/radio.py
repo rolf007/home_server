@@ -17,18 +17,19 @@ class Radio():
         self.comm = Comm(5000, "player", {}, self.logger)
         self.inputter = inputter
         self.main_menu = KeyPress.mkUnion([
-            KeyPress.compile(".A.a<match>", match=lambda: self.youtube_play("metallica judas kiss")),
-            KeyPress.compile(".B.b<match>", match=lambda: self.radio_play()),
+            KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play("DROID-3 new firmware")),
+            KeyPress.compile(".B.b<match>", match=lambda: self.youtube_play("metallica judas kiss")),
+            KeyPress.compile(".C.c<match>", match=lambda: self.radio_play()),
             KeyPress.compile(".D.d<match>", match=lambda: self.podcast("d6m")),
-            KeyPress.compile(".D.A.a.d<match>", match=lambda: self.podcast("baelte")),
-            KeyPress.compile(".D.A.a.A.a.d<match>", match=lambda: self.podcast("orientering")),
-            KeyPress.compile(".D.C.c.d<match>", match=lambda: self.podcast_next()),
-            KeyPress.compile(".D.B.b.d<match>", match=lambda: self.podcast_prev()),
-            KeyPress.compile(".B.A.a.b<match>", match=lambda: self.radio_channel(0)),
-            KeyPress.compile(".B.C.c.b<match>", match=lambda: self.radio_channel(1)),
-            KeyPress.compile(".C.c<match>", match=lambda: self.multicast_play(None)),
-            KeyPress.compile(".C.A.a.c<match>", match=lambda: self.multicast_play("DROID-3 plays tough!")),
-            KeyPress.compile(".C.A.a.A.a.c<match>", match=lambda: self.multicast_play("DROID-3 new firmware")),
+            KeyPress.compile(".E.e<match>", match=lambda: self.knightrider()),
+            KeyPress.compile(".F.f<match>", match=lambda: self.podcast("baelte")),
+            #KeyPress.compile(".D.A.a.A.a.d<match>", match=lambda: self.podcast("orientering")),
+            #KeyPress.compile(".D.C.c.d<match>", match=lambda: self.podcast_next()),
+            #KeyPress.compile(".D.B.b.d<match>", match=lambda: self.podcast_prev()),
+            #KeyPress.compile(".B.A.a.b<match>", match=lambda: self.radio_channel(0)),
+            #KeyPress.compile(".B.C.c.b<match>", match=lambda: self.radio_channel(1)),
+            #KeyPress.compile(".C.c<match>", match=lambda: self.multicast_play(None)),
+            #KeyPress.compile(".C.A.a.c<match>", match=lambda: self.multicast_play("DROID-3 plays tough!")),
             KeyPress.compile(".C.A.a.A.a.A.a.c<match>", match=lambda: self.go_to_morse()),
         ])
         morse_maker = MorseMaker('C', 'c', 200, 500)
@@ -63,11 +64,13 @@ class Radio():
     def radio_channel(self, channel):
         self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "radio", {channel})
+        res = self.comm.call("led", "set", {"anim": ["tu"]})
 
     def radio_play(self):
         print("playing radio")
         self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "radio", {})
+        res = self.comm.call("led", "set", {"anim": ["tu"]})
 
     def podcast(self, program):
         if program:
@@ -79,6 +82,7 @@ class Radio():
                 print("failed to send %s" % e)
         self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "multicast", {})
+        res = self.comm.call("led", "set", {"anim": ["vi"]})
 
     def podcast_next(self):
         try:
@@ -88,6 +92,7 @@ class Radio():
             print("failed to send %s" % e)
         self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "multicast", {})
+        res = self.comm.call("led", "set", {"anim": ["vi"]})
 
     def podcast_prev(self):
         try:
@@ -97,6 +102,7 @@ class Radio():
             print("failed to send %s" % e)
         self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "multicast", {})
+        res = self.comm.call("led", "set", {"anim": ["vi"]})
 
     def multicast_play(self, title):
         if title:
@@ -108,6 +114,11 @@ class Radio():
                 print("failed to send %s" % e)
         self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "multicast", {})
+        res = self.comm.call("led", "set", {"anim": ["mp"]})
+
+    def knightrider(self):
+        print("knightrider!")
+        res = self.comm.call("led", "set", {"anim": ["knightrider"]})
 
     def youtube_play(self, query):
         if query:
@@ -119,6 +130,7 @@ class Radio():
                 print("failed to send %s" % e)
         self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "multicast", {})
+        res = self.comm.call("led", "set", {"anim": ["mp"]})
 
     def main_loop(self):
         self.inputter.main_loop()

@@ -116,7 +116,6 @@ class LedController():
         self.meta_led = self.Led()
 
         self.set_leds({"anim": ["mp"]})
-        self.set_leds({"anim": ["knightrider"]})
 
         if not self.host_mode:
             # We only have SPI bus 0 available to us on the Pi
@@ -184,18 +183,27 @@ class LedController():
             return (404, "function 'set' requires 'anim'")
         anim = params["anim"][0]
         if anim == "mp":
-            self.leds[0][0].set_anim([("set",(10,0,0,255,255)) ])
+            self.leds[0][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[1][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[2][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[3][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[4][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[5][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[6][0].set_anim([("set",(0,0,0,0,255))])
-            self.leds[7][0].set_anim([("set",(0,0,0,0,255))])
-        if anim == "cd":
+            self.leds[7][0].set_anim([("set",(10,0,0,255,255))])
+        if anim == "tu":
             self.leds[0][0].set_anim([("set",(0,0,0,0,255))])
-            self.leds[1][0].set_anim([("set",(10,0,0,255,255)) ])
+            self.leds[1][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[2][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[3][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[4][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[5][0].set_anim([("set",(10,0,0,255,255))])
+            self.leds[6][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[7][0].set_anim([("set",(0,0,0,0,255))])
+        if anim == "vi":
+            self.leds[0][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[1][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[2][0].set_anim([("set",(10,0,0,255,255))])
             self.leds[3][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[4][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[5][0].set_anim([("set",(0,0,0,0,255))])
