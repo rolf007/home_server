@@ -103,20 +103,37 @@ class LedController():
 
 
     def __init__(self, dt, host_mode):
+        self.dt = dt
+        self.host_mode = host_mode
         self.logger = Logger("led")
         self.logger.log("Started leds")
+        self.logger.log("host_mode = %s" % host_mode)
         self.comm = Comm(5008, "led", {"set": self.set_leds, }, self.logger)
         self.startup_timer = None
         self.num_leds = 8
         self.num_layers = 3
-        #self.leds = [self.Led() for i in range(self.num_leds)]
         self.leds = [[self.Led() for i in range(self.num_layers)] for i in range(self.num_leds)]
-        print(self.leds[7][2])
         self.meta_led = self.Led()
-        self.dt = dt
 
         self.set_leds({"anim": ["mp"]})
         self.set_leds({"anim": ["knightrider"]})
+
+        if not self.host_mode:
+            # We only have SPI bus 0 available to us on the Pi
+            bus = 0
+
+            #Device is the chip select pin. Set to 0 or 1, depending on the connections
+            device = 1
+
+            # Enable SPI
+            self.spi = spidev.SpiDev()
+
+            # Open a connection to a specific bus and device (chip select pin)
+            self.spi.open(bus, device)
+
+            # Set SPI speed and mode
+            self.spi.max_speed_hz = 500000
+            self.spi.mode = 0
 
     def timer_func(self):
         self.startup_timer = None
@@ -124,14 +141,14 @@ class LedController():
         self.meta_led.update(self.dt)
         running = self.meta_led.running
         for layer in range(self.num_layers):
-            sys.stdout.write(" "* layer)
             for led in range(self.num_leds):
                 self.leds[led][layer].update(self.dt)
-#                sys.stdout.write("(%03d %03d %03d) " % (self.leds[led][layer].now[1], self.leds[led][layer].now[2], self.leds[led][layer].now[3]))
                 running = running or self.leds[led][layer].running
-#            sys.stdout.write("\n")
 
-        sys.stdout.write("=")
+        if not self.host_mode:
+            msg = [0x00, 0x00, 0x00, 0x00]
+            self.spi.xfer2(msg)
+
         for led in range(self.num_leds):
             rA = self.leds[led][0].now[1]
             gA = self.leds[led][0].now[2]
@@ -146,9 +163,16 @@ class LedController():
                 gA = (gB * aB / 255) + (gA * aA * (255 - aB) / (255*255))
                 bA = (bB * aB / 255) + (bA * aA * (255 - aB) / (255*255))
                 aA = aB + (aA * (255 - aB) / 255)
-            sys.stdout.write("(%03d %03d %03d) " % (rA, gA, bA))
-        sys.stdout.write("\n")
-        #sys.stdout.write("\n")
+            if self.host_mode:
+                sys.stdout.write("(%03d %03d %03d) " % (rA, gA, bA))
+            else:
+                msg0 = [128+64+32+10, int(bA), int(gA), int(rA)]
+                self.spi.xfer2(msg0)
+        if self.host_mode:
+            sys.stdout.write("\n")
+        else:
+            msg = [0xff, 0xff, 0xff, 0xff]
+            self.spi.xfer2(msg)
 
         if running:
             self.startup_timer = threading.Timer(self.dt, self.timer_func)
@@ -190,7 +214,7 @@ class LedController():
             d = period/((self.num_leds-1)*2)
             on = (10,255,0,0,255)
             off = (0,255,0,0,0)
-            self.meta_led.set_anim([("repeat", 1),
+            self.meta_led.set_anim([("repeat", 10),
                                     ("setanim", self.leds[0][1], [("set",on), ("fade", t, off, t)]), ("wait", 1*d),
                                     ("setanim", self.leds[1][1], [("set",on), ("fade", t, off, t)]), ("wait", 1*d),
                                     ("setanim", self.leds[2][1], [("set",on), ("fade", t, off, t)]), ("wait", 1*d),
@@ -226,10 +250,11 @@ class LedController():
 if __name__ == '__main__':
     try:
         import RPi.GPIO as gpio
+        import spidev
         host_mode = False
     except (ImportError, RuntimeError):
         host_mode = True
-    led_controller = LedController(0.01, host_mode)
+    led_controller = LedController(0.1, host_mode)
     try:
         while True:
             time.sleep(2.0)

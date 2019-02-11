@@ -191,7 +191,7 @@ class Comm():
         return (404, "Unknown function '%s'" % path)
 
     def mc_received(self, r):
-        data = json.loads(r)
+        data = json.loads(r.decode("ascii"))
         if ("port" in data) and data["port"] == self.port and ("ip" in data) and data["ip"] == self.ip:
             #mc message from my self
             return
