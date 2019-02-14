@@ -86,6 +86,9 @@ class SmsPortal():
 # http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=p%20metallica
 #sms: 'p metallica jump in the fire'
     class Cmd_p(Cmd):
+        def __init__(self, comm, default_mobile, default_tail, default_error):
+            super(SmsPortal.Cmd_p, self).__init__(comm, default_mobile, default_tail, default_error)
+                self.parser.add_argument('.r', type=int, default=None, empty=None)
         def exe(self, arglist):
             self.args = self.parser.parse_args(arglist)
             res = self.comm.call("music_server", "play", {"title": [self.args.remain], "source": ["collection"]})
