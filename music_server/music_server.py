@@ -5,6 +5,7 @@
 #media-video/vlc lua
 #pip install --user eyed3
 #pip install --user youtube_dl
+#pip install --user -U youtube-dl
 
 
 import subprocess

@@ -12,6 +12,11 @@ from enum import Enum
 #cmd ..pay give money
 #cmd ..pay. give money
 
+class ArgpKarseError(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+    def __str__(self):
+        return self.msg
 
 class Args(dict):
     __getattr__= dict.__getitem__
@@ -102,12 +107,12 @@ class ArgpKarse:
         # where type is [str|int|bool] and name is [.a|..arg|.a..arg]
         value_parser_info = {'type': type, "default": default, "required": required, "empty": empty}
         if len(name) < 2:
-            raise Exception("arg name too short")
+            raise ArgpKarseError("arg name too short")
         if name[0] != '.':
-            raise Exception("arg name must start with '.'")
+            raise ArgpKarseError("arg name must start with '.'")
         if name[1] == '.':
             if len(name) < 3:
-                raise Exception("missing arg name after '..'")
+                raise ArgpKarseError("missing arg name after '..'")
             else:
                 self.arg_name_list[name[2:]] = value_parser_info
         else:
@@ -115,7 +120,7 @@ class ArgpKarse:
                 self.arg_name_list[name[1]] = value_parser_info
             elif len(name) > 2:
                 if len(name) < 6 or name[2] != '.' or name[3] != '.': # ".a..ar"
-                    raise Exception("arg name after '.' must be one letter")
+                    raise ArgpKarseError("arg name after '.' must be one letter or like this: '.a..arg'")
                 self.arg_name_list[name[4:]] = value_parser_info
                 self.long_short_name[name[1]] = name[4:]
 
@@ -123,7 +128,7 @@ class ArgpKarse:
         if arg_name in self.long_short_name:
             arg_name = self.long_short_name[arg_name]
         if arg_name not in self.arg_name_list:
-            raise Exception("unknwon arg name: '%s'" % arg_name)
+            raise ArgpKarseError("unknwon arg name: '%s'" % arg_name)
         arg = self.arg_name_list[arg_name]
         if arg["type"] == bool:
             istate = ArgpKarse.ParseBool(arg["empty"])
@@ -134,7 +139,7 @@ class ArgpKarse:
             if space:
                 istate.parseChar(' ')
         else:
-            raise Exception("found unknown type")
+            raise ArgpKarseError("found unknown type")
         return arg_name, istate
 
     def parse_args(self, s):
