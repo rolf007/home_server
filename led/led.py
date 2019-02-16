@@ -249,6 +249,7 @@ class LedController():
             blue = (10,0,0,255,255)
             white = (10,255,255,255,255)
             off = (0,0,0,0,255)
+            off_white = (0,255,255,255,0)
             self.meta_led.set_anim([
                                     ("setanim", self.leds[0][1], [("set",red), ("fade", t, off, t)]), ("wait", 1*d),
                                     ("setanim", self.leds[1][1], [("set",red), ("fade", t, off, t)]), ("wait", 1*d),
@@ -274,14 +275,14 @@ class LedController():
                                     ("setanim", self.leds[5][1], [("set",blue), ("fade", t, off, t)]), ("wait", 1*d),
                                     ("setanim", self.leds[6][1], [("set",blue), ("fade", t, off, t)]), ("wait", 1*d),
                                     ("setanim", self.leds[7][1], [("set",blue), ("fade", t, off, t)]), ("wait", 1*d),
-                                    ("setanim", self.leds[0][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
-                                    ("setanim", self.leds[1][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
-                                    ("setanim", self.leds[2][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
-                                    ("setanim", self.leds[3][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
-                                    ("setanim", self.leds[4][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
-                                    ("setanim", self.leds[5][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
-                                    ("setanim", self.leds[6][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
-                                    ("setanim", self.leds[7][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[0][1], [("set",white), ("fade", t, off_white, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[1][1], [("set",white), ("fade", t, off_white, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[2][1], [("set",white), ("fade", t, off_white, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[3][1], [("set",white), ("fade", t, off_white, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[4][1], [("set",white), ("fade", t, off_white, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[5][1], [("set",white), ("fade", t, off_white, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[6][1], [("set",white), ("fade", t, off_white, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[7][1], [("set",white), ("fade", t, off_white, t)]), ("wait", 1*d),
                                     ])
 
         running = self.meta_led.running
