@@ -115,7 +115,7 @@ class LedController():
         self.leds = [[self.Led() for i in range(self.num_layers)] for i in range(self.num_leds)]
         self.meta_led = self.Led()
 
-        self.set_leds({"anim": ["mp"]})
+        self.set_leds({"anim": ["boot"]})
 
         if not self.host_mode:
             # We only have SPI bus 0 available to us on the Pi
@@ -191,7 +191,7 @@ class LedController():
             self.leds[5][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[6][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[7][0].set_anim([("set",(10,0,0,255,255))])
-        if anim == "tu":
+        elif anim == "tu":
             self.leds[0][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[1][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[2][0].set_anim([("set",(0,0,0,0,255))])
@@ -200,7 +200,7 @@ class LedController():
             self.leds[5][0].set_anim([("set",(10,0,0,255,255))])
             self.leds[6][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[7][0].set_anim([("set",(0,0,0,0,255))])
-        if anim == "vi":
+        elif anim == "vi":
             self.leds[0][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[1][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[2][0].set_anim([("set",(10,0,0,255,255))])
@@ -210,13 +210,13 @@ class LedController():
             self.leds[6][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[7][0].set_anim([("set",(0,0,0,0,255))])
 
-        if anim == "foo":
+        elif anim == "foo":
             white = (10,255,255,255,255)
             green = (10,0,255,0,255)
             off = (0,0,0,0,255)
             self.leds[1][0].set_anim([("fade", 1,white,1), ("repeat",2), ("fade", 1,green,1), ("fade", 1, off,1), ("loop",) ])
 
-        if anim == "knightrider":
+        elif anim == "knightrider":
             period = 1.35
             t = 0.6
             d = period/((self.num_leds-1)*2)
@@ -239,6 +239,50 @@ class LedController():
                                     ("setanim", self.leds[1][1], [("set",on), ("fade", t, off, t)]), ("wait", 1*d),
                                     ("loop",),
                                     ("setanim", self.leds[0][1], [("set",on), ("fade", t, off, t)]), ("wait", 1*d),])
+
+        elif anim == "boot":
+            period = 1.35
+            t = 0.6
+            d = period/((self.num_leds-1)*2)
+            red = (10,255,0,0,255)
+            green = (10,0,255,0,255)
+            blue = (10,0,0,255,255)
+            white = (10,255,255,255,255)
+            off = (0,0,0,0,255)
+            self.meta_led.set_anim([
+                                    ("setanim", self.leds[0][1], [("set",red), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[1][1], [("set",red), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[2][1], [("set",red), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[3][1], [("set",red), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[4][1], [("set",red), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[5][1], [("set",red), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[6][1], [("set",red), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[7][1], [("set",red), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[0][1], [("set",green), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[1][1], [("set",green), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[2][1], [("set",green), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[3][1], [("set",green), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[4][1], [("set",green), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[5][1], [("set",green), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[6][1], [("set",green), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[7][1], [("set",green), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[0][1], [("set",blue), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[1][1], [("set",blue), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[2][1], [("set",blue), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[3][1], [("set",blue), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[4][1], [("set",blue), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[5][1], [("set",blue), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[6][1], [("set",blue), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[7][1], [("set",blue), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[0][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[1][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[2][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[3][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[4][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[5][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[6][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ("setanim", self.leds[7][1], [("set",white), ("fade", t, off, t)]), ("wait", 1*d),
+                                    ])
 
         running = self.meta_led.running
         for layer in range(self.num_layers):
