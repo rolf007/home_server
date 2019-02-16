@@ -155,22 +155,32 @@ class MulticastSender():
 
 
 class Comm():
-    def __init__(self, port, service_name, functions, logger):
-        self.ip = self.get_ip()
-        self.port = port
-        self.service = service_name
-        self.functions = functions
+    def __init__(self, port, service_name, functions, logger, try_for_a_while = 10):
         self.logger = logger
-        self.others = {}
-        self.multicast_listener = MulticastListener(lambda data: self.mc_received(data), self.logger)
-        self.multicast_sender = MulticastSender(self.logger)
-        self.unicast_listener = UnicastListener(self.uc_received, self.port, self.logger)
-        self.unicast_sender = UnicastSender(self.logger)
-        start_sleep = random.randint(500, 1000)/1000.0
-        self.startup_timer = threading.Timer(start_sleep, self.startup)
-        self.startup_timer.start()
         self.logger.log("logger just started")
-        self.im_here_timer = None
+        ok = False
+        while not ok:
+            try:
+                self.ip = self.get_ip()
+                self.port = port
+                self.service = service_name
+                self.functions = functions
+                self.others = {}
+                self.multicast_listener = MulticastListener(lambda data: self.mc_received(data), self.logger)
+                self.multicast_sender = MulticastSender(self.logger)
+                self.unicast_listener = UnicastListener(self.uc_received, self.port, self.logger)
+                self.unicast_sender = UnicastSender(self.logger)
+                start_sleep = random.randint(500, 1000)/1000.0
+                self.startup_timer = threading.Timer(start_sleep, self.startup)
+                self.startup_timer.start()
+                self.im_here_timer = None
+                ok = True
+            except Exception as e:
+                self.logger.log("error: %s" % e)
+                time.sleep(1)
+                try_for_a_while -= 1
+                if try_for_a_while == 0:
+                    raise e
 
     def get_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

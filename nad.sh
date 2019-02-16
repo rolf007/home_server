@@ -15,8 +15,11 @@ else
 	echo usage: $0 {start\|stop}
 fi
 # list all:
-# screen -ls
+#screen -ls
 
 # reattach example:
-# screen -r emoji
+#screen -r emoji
 
+# add these lines near the end of /etc/rc.local
+#cd /home/pi/home_server
+#/usr/bin/sudo -s -u pi ./nad.sh start

@@ -40,8 +40,8 @@ class RaspberryInputter():
         send_bit(0)#DISC
         send_bit(0)#TUNER
         send_bit(0)#CD
-        send_bit(0)#MP
-        send_bit(1)#TAPE MONITOR
+        send_bit(1)#MP
+        send_bit(0)#TAPE MONITOR
         send_bit(0)#VIDEO
         send_bit(0)#AUX
         send_bit(0)#TONE DEFEAT
