@@ -26,7 +26,7 @@ sys.path.append(os.path.join(home_server_root, "logger"))
 from comm import Comm
 from comm import UnicastListener
 from logger import Logger
-from argpkarse import ArgpKarse
+from argpkarse import ArgpKarse, ArgpKarseError
 
 ##res = requests.get("https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=xxxxxxxx&to=+4526857540&Text=%s" % "outofmoney", timeout=2)
 ##print("res '%s'" % res)
@@ -48,15 +48,15 @@ class SmsPortal():
         else:
             self.logger.log("WARNING, you can't send SMS'es")
         self.sms_cmds = {
-                "p": self.Cmd_p(self.comm, 0, False, 0),
-                "py": self.Cmd_py(self.comm, 0, False, 0),
-                "er": self.Cmd_emoji_receive(self.comm, 1, False, 0),
-                "es": self.Cmd_emoji_send(self.comm, 1, False, 0),
-                "ping": self.Cmd_ping(self.comm, 1, True, 0),
-                "pinglog": self.Cmd_pinglog(self.comm, 1, True, 0),
-                "radio": self.Cmd_radio(self.comm, 0, False, 0),
-                "pod": self.Cmd_podcast(self.comm, 0, False, 0),
-                "wiki": self.Cmd_wiki(self.comm, 1, False, 0)
+                "p": self.Cmd_p(self.logger, self.comm, 0, False, 0),
+                "py": self.Cmd_py(self.logger, self.comm, 0, False, 0),
+                "er": self.Cmd_emoji_receive(self.logger, self.comm, 1, False, 0),
+                "es": self.Cmd_emoji_send(self.logger, self.comm, 1, False, 0),
+                "ping": self.Cmd_ping(self.logger, self.comm, 1, True, 0),
+                "pinglog": self.Cmd_pinglog(self.logger, self.comm, 1, True, 0),
+                "radio": self.Cmd_radio(self.logger, self.comm, 0, False, 0),
+                "pod": self.Cmd_podcast(self.logger, self.comm, 0, False, 0),
+                "wiki": self.Cmd_wiki(self.logger, self.comm, 1, False, 0)
                 }
     def fixup_phone_number(self, phonenumber):
         fixed_number = phonenumber
@@ -69,12 +69,15 @@ class SmsPortal():
         return fixed_number
 
     class Cmd():
-        def __init__(self, comm, default_mobile, default_tail, default_error):
+        def __init__(self, logger, comm, default_mobile, default_tail, default_error):
+            self.logger = logger
             self.comm = comm
             self.parser = ArgpKarse()
             self.parser.add_argument('.m', type=int, default=default_mobile, empty=1)
             self.parser.add_argument('..tail', type=bool, default=default_tail, empty=True)
             self.parser.add_argument('..err', type=int, default=default_error, empty=1)
+        def parse_args(self, arglist):
+            self.args = self.parser.parse_args(arglist)
         def mobile(self):
             return self.args.m
         def tail(self):
@@ -86,9 +89,29 @@ class SmsPortal():
 # http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=p%20metallica
 #sms: 'p metallica jump in the fire'
     class Cmd_p(Cmd):
-        def exe(self, arglist):
-            self.args = self.parser.parse_args(arglist)
-            res = self.comm.call("music_server", "play", {"title": [self.args.remain], "source": ["collection"]})
+        def __init__(self, logger, comm, default_mobile, default_tail, default_error):
+            super(SmsPortal.Cmd_p, self).__init__(logger, comm, default_mobile, default_tail, default_error)
+            self.parser.add_argument('.r..artist', type=str, default=None, empty=None)
+            self.parser.add_argument('.l..album', type=str, default=None, empty=None)
+            self.parser.add_argument('.c..track', type=str, default=None, empty=None)
+            self.parser.add_argument('.g..genre', type=str, default=None, empty=None)
+            self.parser.add_argument('.e..release', type=str, default=None, empty=None)
+        def exe(self):
+            arguments = {"source": ["collection"]}
+            if self.args.remain != "":
+                arguments["title"] = self.args.remain
+            if self.args.artist != None:
+                arguments["artist"] = self.args.artist
+            if self.args.album != None:
+                arguments["album"] = self.args.album
+            if self.args.track != None:
+                arguments["track"] = self.args.track
+            if self.args.genre != None:
+                arguments["genre"] = self.args.genre
+            if self.args.release != None:
+                arguments["release"] = self.args.release
+            self.logger.log("sms portal asking for: %s" % arguments)
+            res = self.comm.call("music_server", "play", arguments)
             if res[0] != 200:
                 return res
             res = self.comm.call("stream_receiver", "multicast", {})
@@ -98,8 +121,7 @@ class SmsPortal():
 # http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=p%20metallica
 #sms: 'py metallica jump in the fire'
     class Cmd_py(Cmd):
-        def exe(self, arglist):
-            self.args = self.parser.parse_args(arglist)
+        def exe(self):
             res = self.comm.call("music_server", "play", {"query": [self.args.remain], "source": ["youtube"]})
             if res[0] != 200:
                 return res
@@ -108,31 +130,27 @@ class SmsPortal():
             return res
 
     class Cmd_emoji_receive(Cmd):
-        def exe(self, arglist):
-            self.args = self.parser.parse_args(arglist)
+        def exe(self):
             res = self.comm.call("emoji", "receive", {"text": [self.args.remain]})
             return res
 
 # http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=es .dolphin. .dolphin.
 #sms: 'es hello .UNICORN.'
     class Cmd_emoji_send(Cmd):
-        def exe(self, arglist):
-            self.args = self.parser.parse_args(arglist)
+        def exe(self):
             res = self.comm.call("emoji", "send", {"text": [self.args.remain]})
             return res
 
 #sms: 'ping'
     class Cmd_ping(Cmd):
-        def exe(self, arglist):
-            self.args = self.parser.parse_args(arglist)
+        def exe(self):
             res = self.comm.call("ping_server", "status", {})
             return res
 
 # http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=pinglog%20SG
 #sms: 'pinglog SG'
     class Cmd_pinglog(Cmd):
-        def exe(self, arglist):
-            self.args = self.parser.parse_args(arglist)
+        def exe(self):
             res = self.comm.call("ping_server", "log", {"user": [self.args.remain]})
             return res
 
@@ -141,8 +159,7 @@ class SmsPortal():
 #sms: 'radio 24syv'
 #sms: 'radio p3'
     class Cmd_radio(Cmd):
-        def exe(self, arglist):
-            self.args = self.parser.parse_args(arglist)
+        def exe(self):
             res = self.comm.call("stream_receiver", "radio", {"channel": [self.args.remain]})
             res = self.comm.call("led", "set", {"anim": ["tu"]})
             return res
@@ -151,8 +168,7 @@ class SmsPortal():
 #sms: 'pod baelte'
 #sms: 'pod prev'
     class Cmd_podcast(Cmd):
-        def exe(self, arglist):
-            self.args = self.parser.parse_args(arglist)
+        def exe(self):
             res = (404, "unknown podcast command '%s'" % self.args.remain)
             if self.args.remain == "next":
                 res = self.comm.call("music_server", "podcast", {"next": ["1"]})
@@ -174,8 +190,7 @@ class SmsPortal():
 
 #web: http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=wiki%20greta%20thunberg
     class Cmd_wiki(Cmd):
-        def exe(self, arglist):
-            self.args = self.parser.parse_args(arglist)
+        def exe(self):
             res = self.comm.call("wiki", "wiki", {"query": [self.args.remain]})
             return res
 
@@ -211,7 +226,12 @@ class SmsPortal():
 
         if cmd in self.sms_cmds:
             cmd_inst = self.sms_cmds[cmd]
-            res = cmd_inst.exe(arglist)
+            try:
+                cmd_inst.parse_args(arglist)
+            except ArgpKarseError as e:
+                self.logger.log("Error: ArgpKarse: %s" % e)
+                return (200, "ok, but %s" %e)
+            res = cmd_inst.exe()
             if res[1] != None and res[1] != "":
                 if res[0] == 200:
                     mobile = cmd_inst.mobile()
