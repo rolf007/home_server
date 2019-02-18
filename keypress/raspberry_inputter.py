@@ -107,7 +107,7 @@ class RaspberryInputter():
     def main_loop(self):
         old_butts = (0,0,0,0,0,0,0,0)
         while self.running:
-            time.sleep(0.1)
+            time.sleep(0.02)
             print("raspberry inputter mainloop")
             butts = self.pop_NAD_button()
             if butts != old_butts:

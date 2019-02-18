@@ -18,13 +18,13 @@ class Radio():
         self.comm = Comm(5000, "player", {}, self.logger)
         self.inputter = inputter
         self.main_menu = KeyPress.mkUnion([
-            #KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play("DROID-3 new firmware")),
-            KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play("for evigt")),
+            KeyPress.compile(".A.a<match>", match=lambda: self.go_to_playlist_menu()),
             KeyPress.compile(".B.b<match>", match=lambda: self.youtube_play("metallica judas kiss")),
-            KeyPress.compile(".C.c<go_to_radio_menu>", go_to_radio_menu=lambda: self.go_to_radio_menu()),
-            KeyPress.compile(".D.d<match>", match=lambda: self.podcast("d6m")),
+            KeyPress.compile(".C.c<match>", match=lambda: self.go_to_radio_menu()),
+            KeyPress.compile(".D.d<match>", match=lambda: self.multicast_play("for evigt")),
             KeyPress.compile(".E.e<match>", match=lambda: self.knightrider()),
-            KeyPress.compile(".F.f<match>", match=lambda: self.podcast("baelte")),
+            KeyPress.compile(".F.f<match>", match=lambda: self.go_to_podcast_menu()),
+
             #KeyPress.compile(".D.A.a.A.a.d<match>", match=lambda: self.podcast("orientering")),
             #KeyPress.compile(".D.C.c.d<match>", match=lambda: self.podcast_next()),
             #KeyPress.compile(".D.B.b.d<match>", match=lambda: self.podcast_prev()),
@@ -39,6 +39,18 @@ class Radio():
             KeyPress.compile(".B.b<radio_1>", radio_1=lambda: self.radio_channel("p2")),
             KeyPress.compile(".C.c<radio_2>", radio_2=lambda: self.radio_channel("p3")),
             KeyPress.compile(".D.d<radio_3>", radio_3=lambda: self.radio_channel("24syv")),
+        ])
+        self.podcast_menu = KeyPress.mkUnion([
+            KeyPress.compile(".A.a<pod_0>", pod_0=lambda: self.podcast_program("baelte")),
+            KeyPress.compile(".B.b<pod_1>", pod_1=lambda: self.podcast_program("orientering")),
+            KeyPress.compile(".C.c<pod_2>", pod_2=lambda: self.podcast_program("mads")),
+            KeyPress.compile(".D.d<pod_3>", pod_3=lambda: self.podcast_program("d6m")),
+        ])
+        self.playlist_menu = KeyPress.mkUnion([
+            KeyPress.compile(".A.a<pod_0>", pod_0=lambda: self.podcast_program("baelte")),
+            KeyPress.compile(".B.b<pod_1>", pod_1=lambda: self.podcast_program("orientering")),
+            KeyPress.compile(".C.c<pod_2>", pod_2=lambda: self.podcast_program("mads")),
+            KeyPress.compile(".D.d<pod_3>", pod_3=lambda: self.podcast_program("d6m")),
         ])
         morse_maker = MorseMaker('C', 'c', 200, 500)
         self.morse_menu = KeyPress.mkUnion(morse_maker.mkAll(lambda c: self.morse_append(c)) +
@@ -79,11 +91,35 @@ class Radio():
         res = self.comm.call("led", "set", {"anim": ["radio_menu"]})
         res = self.comm.call("stream_receiver", "radio", {})
         self.inputter.set_key_press(KeyPress(self.radio_menu))
-        self.startup_timer = threading.Timer(1.5, self.leave_radio_menu)
+        self.startup_timer = threading.Timer(2.5, self.leave_radio_menu)
+        self.startup_timer.start()
+
+    def go_to_podcast_menu(self):
+        res = self.comm.call("led", "set", {"anim": ["podcast_menu"]})
+        res = self.comm.call("music_server", "podcast", {})
+        res = self.comm.call("stream_receiver", "multicast", {})
+        self.inputter.set_key_press(KeyPress(self.podcast_menu))
+        self.startup_timer = threading.Timer(2.5, self.leave_podcast_menu)
+        self.startup_timer.start()
+            #KeyPress.compile(".F.f<match>", match=lambda: self.podcast("baelte")),
+
+    def go_to_playlist_menu(self):
+        res = self.comm.call("led", "set", {"anim": ["playlist_menu"]})
+        res = self.comm.call("stream_receiver", "multicast", {})
+        self.inputter.set_key_press(KeyPress(self.playlist_menu))
+        self.startup_timer = threading.Timer(2.5, self.leave_playlist_menu)
         self.startup_timer.start()
 
     def leave_radio_menu(self):
         res = self.comm.call("led", "set", {"anim": ["tu"]})
+        self.go_to_main_menu()
+
+    def leave_podcast_menu(self):
+        res = self.comm.call("led", "set", {"anim": ["vi"]})
+        self.go_to_main_menu()
+
+    def leave_playlist_menu(self):
+        res = self.comm.call("led", "set", {"anim": ["mp"]})
         self.go_to_main_menu()
 
     def radio_play(self):
