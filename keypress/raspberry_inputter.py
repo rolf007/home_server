@@ -69,9 +69,7 @@ class RaspberryInputter():
 
     def receive_bit(self):
         b = gpio.input(DIO)
-        time.sleep(0.01)
         gpio.output(CLK,0)
-        time.sleep(0.01)
         gpio.output(CLK,1)
         return b
 
@@ -108,7 +106,6 @@ class RaspberryInputter():
         old_butts = (0,0,0,0,0,0,0,0)
         while self.running:
             time.sleep(0.02)
-            print("raspberry inputter mainloop")
             butts = self.pop_NAD_button()
             if butts != old_butts:
                 if butts[0] and not old_butts[0]: self.runner.key_input('A', True)
@@ -127,7 +124,7 @@ class RaspberryInputter():
                 if not butts[6] and old_butts[6]: self.runner.key_input('g', False)
                 if butts[7] and not old_butts[7]: self.runner.key_input('H', True)
                 if not butts[7] and old_butts[7]: self.runner.key_input('h', False)
-                print(butts)
+                #print(butts)
             old_butts = butts
 
     def shut_down(self):
