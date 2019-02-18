@@ -123,6 +123,10 @@ class RaspberryInputter():
                 if not butts[4] and old_butts[4]: self.runner.key_input('e', False)
                 if butts[5] and not old_butts[5]: self.runner.key_input('F', True)
                 if not butts[5] and old_butts[5]: self.runner.key_input('f', False)
+                if butts[6] and not old_butts[6]: self.runner.key_input('G', True)
+                if not butts[6] and old_butts[6]: self.runner.key_input('g', False)
+                if butts[7] and not old_butts[7]: self.runner.key_input('H', True)
+                if not butts[7] and old_butts[7]: self.runner.key_input('h', False)
                 print(butts)
             old_butts = butts
 

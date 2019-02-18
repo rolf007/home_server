@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 
 home_server_root = os.path.split(sys.path[0])[0]
 sys.path.append(os.path.join(home_server_root, "comm"))
@@ -20,7 +21,7 @@ class Radio():
             #KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play("DROID-3 new firmware")),
             KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play("for evigt")),
             KeyPress.compile(".B.b<match>", match=lambda: self.youtube_play("metallica judas kiss")),
-            KeyPress.compile(".C.c<match>", match=lambda: self.radio_play()),
+            KeyPress.compile(".C.c<go_to_radio_menu>", go_to_radio_menu=lambda: self.go_to_radio_menu()),
             KeyPress.compile(".D.d<match>", match=lambda: self.podcast("d6m")),
             KeyPress.compile(".E.e<match>", match=lambda: self.knightrider()),
             KeyPress.compile(".F.f<match>", match=lambda: self.podcast("baelte")),
@@ -32,6 +33,12 @@ class Radio():
             #KeyPress.compile(".C.c<match>", match=lambda: self.multicast_play(None)),
             #KeyPress.compile(".C.A.a.c<match>", match=lambda: self.multicast_play("DROID-3 plays tough!")),
             KeyPress.compile(".C.A.a.A.a.A.a.c<match>", match=lambda: self.go_to_morse()),
+        ])
+        self.radio_menu = KeyPress.mkUnion([
+            KeyPress.compile(".A.a<radio_0>", radio_0=lambda: self.radio_channel("p1")),
+            KeyPress.compile(".B.b<radio_1>", radio_1=lambda: self.radio_channel("p2")),
+            KeyPress.compile(".C.c<radio_2>", radio_2=lambda: self.radio_channel("p3")),
+            KeyPress.compile(".D.d<radio_3>", radio_3=lambda: self.radio_channel("24syv")),
         ])
         morse_maker = MorseMaker('C', 'c', 200, 500)
         self.morse_menu = KeyPress.mkUnion(morse_maker.mkAll(lambda c: self.morse_append(c)) +
@@ -47,12 +54,12 @@ class Radio():
     def go_to_main_menu(self):
         print("going to main menu...")
         self.inputter.set_key_press(KeyPress(self.main_menu))
+        self.startup_timer = None
 
     def go_to_morse(self):
         print("going to morse...")
         self.inputter.set_key_press(KeyPress(self.morse_menu))
         self.morse_input = ""
-
 
     def end_morse(self):
         self.go_to_main_menu()
@@ -63,9 +70,21 @@ class Radio():
         self.morse_input += c
 
     def radio_channel(self, channel):
+        print("setting radio channel %s" % channel)
         self.inputter.click_NAD_button(1)
-        res = self.comm.call("stream_receiver", "radio", {channel})
+        res = self.comm.call("stream_receiver", "radio", {"channel": [channel]})
         res = self.comm.call("led", "set", {"anim": ["tu"]})
+
+    def go_to_radio_menu(self):
+        res = self.comm.call("led", "set", {"anim": ["radio_menu"]})
+        res = self.comm.call("stream_receiver", "radio", {})
+        self.inputter.set_key_press(KeyPress(self.radio_menu))
+        self.startup_timer = threading.Timer(1.5, self.leave_radio_menu)
+        self.startup_timer.start()
+
+    def leave_radio_menu(self):
+        res = self.comm.call("led", "set", {"anim": ["tu"]})
+        self.go_to_main_menu()
 
     def radio_play(self):
         print("playing radio")
@@ -137,5 +156,7 @@ class Radio():
         self.inputter.main_loop()
 
     def shut_down(self):
+        if self.startup_timer != None:
+            self.startup_timer.cancel()
         self.comm.shut_down()
         self.inputter.shut_down()

@@ -21,6 +21,7 @@ class StreamReceiver():
         self.radio = RadioReceiver()
         self.multicast_receiver = MulticastReceiver()
         self.running = True
+        self.source = None
 
     def radio(self, params):
         if "channel" in params:
@@ -44,6 +45,9 @@ class StreamReceiver():
 
     def set_source(self, source):
         print("setting source: '%s'" % source)
+        if source == self.source:
+            return
+        self.source = source
         if source == "radio":
             self.multicast_receiver.stop()
             self.radio.start()
@@ -90,17 +94,14 @@ class RadioReceiver():
         if channel in self.channels:
             if channel != self.channel:
                 self.channel = channel
+                self.stop()
+                self.start()
 
     def start(self):
         print("starting radio...")
-        print("Rolf 0")
         if self.p:
-            print("Rolf 1")
             self.stop()
-            print("Rolf 2")
-        print("Rolf 3")
         self.p = subprocess.Popen(["vlc", "--intf", "dummy", self.channels[self.channel]], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print("Rolf 4")
 #https://www.radio24syv.dk/hoer-radio-paa-din-computer
 #24syv vlc http://streaming.radio24syv.dk/pls/24syv_96_IR.pls
 #https://www.dr.dk/hjaelp/digtal-radio/direkte-links-til-dr-radio-paa-nettet
@@ -109,16 +110,13 @@ class RadioReceiver():
 #P3 vlc http://live-icy.gss.dr.dk/A/A05L.mp3.m3u
 
     def stop(self):
-        print("Rolf 5")
         if self.p == None:
-            print("Rolf 6")
             return
         print("stopping radio...")
         self.p.terminate()
         print("radio stopped!")
         print("vlc radio stopped: %s %s" % self.p.communicate())
         self.p = None
-        print("Rolf 7")
 
 stream_receiver = StreamReceiver()
 try:
