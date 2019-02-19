@@ -25,6 +25,7 @@ class Radio():
             KeyPress.compile(".D.d<match>", match=lambda: self.multicast_play("for evigt")),
             KeyPress.compile(".E.e<match>", match=lambda: self.knightrider()),
             KeyPress.compile(".F.f<match>", match=lambda: self.go_to_podcast_menu()),
+            KeyPress.compile(".H.h<match>", match=lambda: self.go_to_flow_menu()),
 
             #KeyPress.compile(".D.A.a.A.a.d<match>", match=lambda: self.podcast("orientering")),
             #KeyPress.compile(".D.C.c.d<match>", match=lambda: self.podcast_next()),
@@ -46,6 +47,13 @@ class Radio():
             KeyPress.compile(".B.b<match>", match=lambda: self.start_podcast("orientering")),
             KeyPress.compile(".C.c<match>", match=lambda: self.start_podcast("mads")),
             KeyPress.compile(".D.d<match>", match=lambda: self.start_podcast("d6m")),
+        ])
+        self.flow_menu = KeyPress.mkUnion([
+            KeyPress.compile(".A.a<match>", match=lambda: self.flow("first")),
+            KeyPress.compile(".B.b<match>", match=lambda: self.flow("prev")),
+            KeyPress.compile(".C.c<match>", match=lambda: self.flow("random")),
+            KeyPress.compile(".D.d<match>", match=lambda: self.flow("next")),
+            KeyPress.compile(".E.e<match>", match=lambda: self.flow("last")),
         ])
         self.playlist_menu = KeyPress.mkUnion([
             KeyPress.compile(".A.a<match>", match=lambda: self.go_to_users_playlist("karen")),
@@ -91,10 +99,11 @@ class Radio():
         res = self.comm.call("led", "set", {"anim": ["tu"]})
 
     def go_to_radio_menu(self):
+        res = self.comm.call("led", "set", {"anim": ["tu"]})
         res = self.comm.call("led", "set", {"anim": ["radio_menu"]})
         res = self.comm.call("stream_receiver", "radio", {})
         self.inputter.set_key_press(KeyPress(self.radio_menu))
-        self.startup_timer = threading.Timer(self.menu_linger_time, self.leave_radio_menu)
+        self.startup_timer = threading.Timer(self.menu_linger_time, self.leave_submenu)
         self.startup_timer.start()
 
     def go_to_podcast_menu(self):
@@ -102,29 +111,30 @@ class Radio():
         res = self.comm.call("music_server", "podcast", {})
         res = self.comm.call("stream_receiver", "multicast", {})
         self.inputter.set_key_press(KeyPress(self.podcast_menu))
-        self.startup_timer = threading.Timer(self.menu_linger_time, self.leave_podcast_menu)
+        self.startup_timer = threading.Timer(self.menu_linger_time, self.leave_submenu)
+        self.startup_timer.start()
+
+    def go_to_flow_menu(self):
+        res = self.comm.call("led", "set", {"anim": ["flow_menu"]})
+        self.inputter.set_key_press(KeyPress(self.flow_menu))
+        self.startup_timer = threading.Timer(self.menu_linger_time, self.leave_submenu)
         self.startup_timer.start()
 
     def go_to_playlist_menu(self):
         res = self.comm.call("led", "set", {"anim": ["playlist_menu"]})
         res = self.comm.call("stream_receiver", "multicast", {})
         self.inputter.set_key_press(KeyPress(self.playlist_menu))
-        self.startup_timer = threading.Timer(self.menu_linger_time, self.leave_playlist_menu)
+        self.startup_timer = threading.Timer(self.menu_linger_time, self.leave_submenu)
         self.startup_timer.start()
 
     def go_to_users_playlist(self, user):
-        pass
+        if self.startup_timer != None:
+            self.startup_timer.cancel
+        self.startup_timer = threading.Timer(self.menu_linger_time, self.leave_submenu)
+        self.startup_timer.start()
 
-    def leave_radio_menu(self):
-        res = self.comm.call("led", "set", {"anim": ["tu"]})
-        self.go_to_main_menu()
-
-    def leave_podcast_menu(self):
-        res = self.comm.call("led", "set", {"anim": ["vi"]})
-        self.go_to_main_menu()
-
-    def leave_playlist_menu(self):
-        res = self.comm.call("led", "set", {"anim": ["mp"]})
+    def leave_submenu(self):
+        res = self.comm.call("led", "set", {"anim": ["clear_submenu"]})
         self.go_to_main_menu()
 
     def radio_play(self):

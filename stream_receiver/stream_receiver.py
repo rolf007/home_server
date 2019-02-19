@@ -30,6 +30,7 @@ class StreamReceiver():
         self.set_source("radio")
         return (200, "switched to radio ok")
 
+#    http://127.0.0.1:5005/multicast
     def multicast(self, params):
         self.set_source("multicast")
         return (200, "switched to multicast ok")

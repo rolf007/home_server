@@ -55,6 +55,7 @@ class SmsPortal():
                 "ping": self.Cmd_ping(self.logger, self.comm, 1, True, 0),
                 "pinglog": self.Cmd_pinglog(self.logger, self.comm, 1, True, 0),
                 "radio": self.Cmd_radio(self.logger, self.comm, 0, False, 0),
+                "skip": self.Cmd_skip(self.logger, self.comm, 0, False, 0),
                 "pod": self.Cmd_podcast(self.logger, self.comm, 0, False, 0),
                 "wiki": self.Cmd_wiki(self.logger, self.comm, 1, False, 0)
                 }
@@ -164,9 +165,33 @@ class SmsPortal():
             res = self.comm.call("led", "set", {"anim": ["tu"]})
             return res
 
+#web: http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=skip random
+#sms: 'skip 1'       go to next item
+#sms: 'skip'         go to next item
+#sms: 'skip -1'      go to previous item
+#sms: 'skip =0'      go to item 0
+#sms: 'skip last'    go to last item
+#sms: 'skip random'  go to random item
+    class Cmd_skip(Cmd):
+        def exe(self):
+            if self.args.remain == "last":
+                res = self.comm.call("music_server", "skip", {"to": ["last"]})
+            if self.args.remain == "random":
+                res = self.comm.call("music_server", "skip", {"to": ["random"]})
+            if len(self.args.remain) > 0:
+                if self.args.remain[0] == "-":
+                    res = self.comm.call("music_server", "skip", {"prev": [self.args.remain[1:]]})
+                elif self.args.remain[0] == "=":
+                    res = self.comm.call("music_server", "skip", {"to": [self.args.remain[1:]]})
+                else:
+                    res = self.comm.call("music_server", "skip", {"next": [self.args.remain]})
+            else:
+                res = self.comm.call("music_server", "skip", {"next": ["1"]})
+            return res
+
+
 #web: http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=pod%20prev
 #sms: 'pod baelte'
-#sms: 'pod prev'
     class Cmd_podcast(Cmd):
         def exe(self):
             res = (404, "unknown podcast command '%s'" % self.args.remain)

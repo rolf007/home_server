@@ -18,6 +18,7 @@ import time
 from os import listdir
 from os.path import isfile, join
 import pty
+import random
 import re
 import youtube_dl
 
@@ -66,6 +67,9 @@ class VlcThread():
     def play(self, filename):
         out = self.remote_control('add file://%s' % filename)
 
+    def stop(self):
+        out = self.remote_control('stop')
+
     def get_cur_playlist_id(self):
         r = re.compile('^\|\s*\*([0-9]+).*')
         out = self.remote_control('playlist')
@@ -84,7 +88,7 @@ class VlcThread():
             if m:
                 return m.group(1)
 
-    def stop(self):
+    def shut_down(self):
         if self.p == None:
             return
         print("stopping serving music...")
@@ -150,58 +154,57 @@ class Podcaster():
             }
         }
 
-        if "program" in params:
-            program = params["program"][0]
-            if program in programs:
-                program_info = programs[program]
-                p = subprocess.Popen("wget \"%s\" -O -" % program_info["url"], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                stdout, stderr = p.communicate()
-                if p.returncode != 0:
-                    return (404, "Failed to get info page"), None
-                self.episodes = re.findall(program_info["regex"], stdout.decode('ascii', 'ignore'))
-                self.episodes.reverse()
-                self.program_name = program_info["name"]
-                if "episode" in params:
-                    self.cur_episode = int(params["episode"][0])
-                else:
-                    self.cur_episode = len(self.episodes) - 1
-                if self.cur_episode >= 0 and self.cur_episode < len(self.episodes):
-                    return self.download_podcast()
-                else:
-                    return (404, "No episodes found"), None
+        if "program" not in params:
+            return (404, "for 'podcast', 'program' is a required argument")
+        program = params["program"][0]
+        if program in programs:
+            program_info = programs[program]
+            p = subprocess.Popen("wget \"%s\" -O -" % program_info["url"], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = p.communicate()
+            if p.returncode != 0:
+                return (404, "Failed to get info page"), None
+            self.episodes = re.findall(program_info["regex"], stdout.decode('ascii', 'ignore'))
+            self.episodes.reverse()
+            self.program_name = program_info["name"]
+            if "episode" in params:
+                self.cur_episode = int(params["episode"][0])
             else:
-                return (404, "Unknown podcast program '%s'" % program), None
-        elif "next"  in params:
-            if self.episodes == None:
-                return (404, "no current podcast program"), None
-            if self.cur_episode >= len(self.episodes)-1:
-                return (404, "no newer programs"), None
-            self.cur_episode += 1
-            return self.download_podcast()
-        elif "prev"  in params:
-            if self.episodes == None:
-                return (404, "no current podcast program"), None
-            if self.cur_episode <= 0:
-                return (404, "no older programs"), None
-            self.cur_episode -= 1
-            return self.download_podcast()
+                self.cur_episode = len(self.episodes) - 1
+            if self.cur_episode >= 0 and self.cur_episode < len(self.episodes):
+                filename = self.download_podcast()
+                if filename:
+                    return (200, "Found '%d' episodes. Starting program '%s', episode %d" % (len(self.episodes), self.program_name, self.cur_episode)), filename
+                return (404, "Failed to get sound file"), None
+            else:
+                return (404, "No episodes found"), None
         else:
-            return (404, "Unknown podcast query: '%s'" % params), None
+            return (404, "Unknown podcast program '%s'" % program), None
+
+    def skip_to(self, to):
+        if self.episodes == None:
+            return (404, "no current podcast program"), None
+        self.cur_episode = to
+        self.cur_episode = min(self.cur_episode, len(self.episodes)-1)
+        self.cur_episode = max(self.cur_episode, 0)
+        filename = self.download_podcast()
+        if filename:
+            return (200, "Skipping to program '%s', episode %d" % (self.program_name, self.cur_episode)), filename
+        return (404, "Failed to get sound file"), None
 
     def download_podcast(self):
         podcast_path = os.path.join(home_server_config, "podcast")
         mkdirp(podcast_path)
         filename = os.path.join(podcast_path, "%s_-_episode_%d" % (self.program_name, self.cur_episode))
         if os.path.isfile(filename):
-            print("File '%s' already exists" % filename)
+            print("File already exists: '%s'" % filename)
         else:
             print("downloading '%s' -> '%s'" % (self.episodes[self.cur_episode], filename))
             p = subprocess.Popen("wget \"%s\" -O %s" % (self.episodes[self.cur_episode], filename), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, stderr = p.communicate()
             print("downloading done!")
             if p.returncode != 0:
-                return (404, "Failed to get sound file"), None
-        return (200, "Found '%d' episodes. Starting program '%s'" % (len(self.episodes), self.program_name)), filename
+                return None
+        return filename
 
 class MusicCollection():
     def __init__(self, logger, collection):
@@ -252,7 +255,8 @@ class MusicServer():
         self.music_collection = MusicCollection(self.logger, load_collection(self.logger))
         self.vlc_thread = VlcThread(self.logger)
         self.podcaster = Podcaster()
-        self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast, "tag": self.tag}, self.logger)
+        self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast, "skip": self.skip, "stop": self.stop, "tag": self.tag}, self.logger)
+        self.mode = "stopped"
 
     def enqueue_file(self, filename, params):
         print("now enqueueing! '%s'" % filename)
@@ -260,13 +264,55 @@ class MusicServer():
         id = self.vlc_thread.get_cur_playlist_id()
         print("id = '%s'" % id)
 
+#http://127.0.0.1:5001/skip?next=3
+#http://127.0.0.1:5001/skip?prev=1
+#http://127.0.0.1:5001/skip?to=random
+#http://127.0.0.1:5001/skip?to=0
+#http://127.0.0.1:5001/skip?to=last
+    def skip(self, params):
+        if "next" not in params and "prev" not in params and "to" not in params:
+            return (404, "'skip' requires either 'next' or 'prev'.")
+        to = None
+        if "next" in params:
+            delta = int(params["next"][0])
+        elif "prev" in params:
+            delta = -int(params["prev"][0])
+        elif "to" in params:
+            to = params["to"][0]
+        if self.mode == "podcast":
+            if to is not None:
+                if to == "random":
+                    to = random.randint(0, len(self.podcaster.episodes)-1)
+                elif to == "last":
+                    to = len(self.podcaster.episodes)-1
+                else:
+                    to = int(to)
+                ret, filename = self.podcaster.skip_to(to)
+            else:
+                cur = self.podcaster.cur_episode
+                if cur is None:
+                    return (404, "can't 'skip'. No current podcast playing.")
+                ret, filename = self.podcaster.skip_to(cur + delta)
+            if filename:
+                self.enqueue_file(filename, params)
+            return ret
+        elif self.mode == "music":
+            return (200, "skipped music")
+        else:
+            return (404, "Can't skip. Nothing is playing.")
+
+    def stop(self, params):
+        self.mode = "stopped"
+        self.vlc_thread.stop()
+        return (200, "stopped")
+
 #http://127.0.0.1:5001/podcast?program=d6m&episode=4
 #http://127.0.0.1:5001/podcast?program=d6m
-#http://127.0.0.1:5001/podcast?next=1
     def podcast(self, params):
         ret, filename = self.podcaster.podcast(params)
         if filename:
             self.enqueue_file(filename, params)
+            self.mode = "podcast"
         return ret
 
 #http://127.0.0.1:5001/tag?star=5
@@ -343,6 +389,7 @@ class MusicServer():
         if best_url == None:
             return (404, "Music collection seems to be empty")
         self.enqueue_file(best_url, params)
+        self.mode = "music"
         return (200, "playing: '" + self.music_collection.getPrettyName(best_url) + "'")
 
     def play_youtube(self, params):
@@ -384,6 +431,7 @@ class MusicServer():
         filename = os.path.join(youtube_path, name)
         os.rename("/tmp/yt.mp3", filename)
         self.enqueue_file(filename, params)
+        self.mode = "music"
         print("playing %s" % name)
 
         return (200, "playing name %s" % name)
@@ -391,7 +439,7 @@ class MusicServer():
 
     def shut_down(self):
         print("music_server shutting down!")
-        self.vlc_thread.stop()
+        self.vlc_thread.shut_down()
         self.comm.shut_down()
         print("music_server shutted down!")
 
