@@ -28,8 +28,6 @@ class Radio():
             KeyPress.compile(".H.h<match>", match=lambda: self.go_to_flow_menu()),
 
             #KeyPress.compile(".D.A.a.A.a.d<match>", match=lambda: self.podcast("orientering")),
-            #KeyPress.compile(".D.C.c.d<match>", match=lambda: self.podcast_next()),
-            #KeyPress.compile(".D.B.b.d<match>", match=lambda: self.podcast_prev()),
             #KeyPress.compile(".B.A.a.b<match>", match=lambda: self.radio_channel(0)),
             #KeyPress.compile(".B.C.c.b<match>", match=lambda: self.radio_channel(1)),
             #KeyPress.compile(".C.c<match>", match=lambda: self.multicast_play(None)),
@@ -49,11 +47,11 @@ class Radio():
             KeyPress.compile(".D.d<match>", match=lambda: self.start_podcast("d6m")),
         ])
         self.flow_menu = KeyPress.mkUnion([
-            KeyPress.compile(".A.a<match>", match=lambda: self.flow("first")),
-            KeyPress.compile(".B.b<match>", match=lambda: self.flow("prev")),
-            KeyPress.compile(".C.c<match>", match=lambda: self.flow("random")),
-            KeyPress.compile(".D.d<match>", match=lambda: self.flow("next")),
-            KeyPress.compile(".E.e<match>", match=lambda: self.flow("last")),
+            KeyPress.compile(".A.a<match>", match=lambda: self.flow({"to": ["0"]})),
+            KeyPress.compile(".B.b<match>", match=lambda: self.flow({"prev": [1]})),
+            KeyPress.compile(".C.c<match>", match=lambda: self.flow({"to": ["random"]})),
+            KeyPress.compile(".D.d<match>", match=lambda: self.flow({"next": ["1"]})),
+            KeyPress.compile(".E.e<match>", match=lambda: self.flow({"to": ["last"]})),
         ])
         self.playlist_menu = KeyPress.mkUnion([
             KeyPress.compile(".A.a<match>", match=lambda: self.go_to_users_playlist("karen")),
@@ -143,6 +141,9 @@ class Radio():
         res = self.comm.call("stream_receiver", "radio", {})
         res = self.comm.call("led", "set", {"anim": ["tu"]})
 
+    def flow(self, skip):
+        res = self.comm.call("music_server", "skip", skip)
+
     def start_podcast(self, program):
         res = self.comm.call("led", "set", {"anim": ["vi_wait"]})
         if program:
@@ -152,26 +153,6 @@ class Radio():
                 print("res = %d %s" % res)
             except requests.ConnectionError as e:
                 print("failed to send %s" % e)
-        self.inputter.click_NAD_button(1)
-        res = self.comm.call("stream_receiver", "multicast", {})
-        res = self.comm.call("led", "set", {"anim": ["vi"]})
-
-    def podcast_next(self):
-        try:
-            res = self.comm.call("music_server", "podcast", {"next": [1]})
-            print("res = %d %s" % res)
-        except requests.ConnectionError as e:
-            print("failed to send %s" % e)
-        self.inputter.click_NAD_button(1)
-        res = self.comm.call("stream_receiver", "multicast", {})
-        res = self.comm.call("led", "set", {"anim": ["vi"]})
-
-    def podcast_prev(self):
-        try:
-            res = self.comm.call("music_server", "podcast", {"prev": [1]})
-            print("res = %d %s" % res)
-        except requests.ConnectionError as e:
-            print("failed to send %s" % e)
         self.inputter.click_NAD_button(1)
         res = self.comm.call("stream_receiver", "multicast", {})
         res = self.comm.call("led", "set", {"anim": ["vi"]})

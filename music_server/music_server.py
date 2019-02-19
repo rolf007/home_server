@@ -155,7 +155,7 @@ class Podcaster():
         }
 
         if "program" not in params:
-            return (404, "for 'podcast', 'program' is a required argument")
+            return (404, "for 'podcast', 'program' is a required argument"), None
         program = params["program"][0]
         if program in programs:
             program_info = programs[program]
