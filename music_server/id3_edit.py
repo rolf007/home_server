@@ -252,10 +252,13 @@ class Id3Edit:
             return self.repr_item_help(file["id3"].tag.title)
         elif x == 5:
             s = file["id3"].tag.genre
-            if s.id != None:
-                return "(%d)%s" % (s.id, s.name)
+            if s:
+                if s.id != None:
+                    return "(%d)%s" % (s.id, s.name)
+                else:
+                    return "()%s" % s.name
             else:
-                return "()%s" % s.name
+                return ""
         elif x == 6:
             s = file["id3"].tag.release_date
             if s is None:
