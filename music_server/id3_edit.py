@@ -94,6 +94,8 @@ class Id3Edit:
 
         self.dir_cursor = 0
         self.dirs = []
+        self.dialog = None
+        self.menu = "main"
 
         self.num_columns = 8
         self.pads = []
@@ -105,6 +107,7 @@ class Id3Edit:
             if len(fils) > 0:
                 self.dirs.append(root)
 
+        self.main_cursor_x = 0
         self.change_dir()
         self.resize()
 
@@ -116,6 +119,8 @@ class Id3Edit:
                     self.edit_menu_draw()
                 elif self.menu == "main":
                     self.main_menu_draw()
+                if self.dialog:
+                    self.dialog_draw()
                 if c:
                     self.screen.addstr(0, 30, "%s %s" % (str(c), self.debug), curses.A_BOLD)
             except curses.error:
@@ -146,6 +151,8 @@ class Id3Edit:
                 ch = '<del>'
             elif c == 0x01:
                 ch = '<c-a>'
+            elif c == 0x13:
+                ch = '<c-s>'
             elif c == 263:
                 ch = '<c-h>'
             elif c == 0x10:
@@ -163,10 +170,13 @@ class Id3Edit:
             else:
                 ch = chr(c)
 
-            if self.menu == "main":
-                self.main_menu_handle_input(ch)
-            elif self.menu == "edit":
-                self.edit_menu_handle_input(ch)
+            if self.dialog:
+                self.dialog_handle_input(ch)
+            else:
+                if self.menu == "main":
+                    self.main_menu_handle_input(ch)
+                elif self.menu == "edit":
+                    self.edit_menu_handle_input(ch)
 
     def resize(self):
         self.screen.clear()
@@ -183,13 +193,20 @@ class Id3Edit:
         c5 = self.width - c0 - c1 - c2 - c3 - c4 - c6 - c7-1
         self.adj = [c0,c1,c2,c3,c4,c5,c6,c7]
 
+    def save(self):
+        for file in self.files:
+            file["id3"].tag.save()
+            if file["url"] != file["old_url"]:
+                root = self.dirs[self.dir_cursor]
+                old_name = os.path.join(root, file["old_url"])
+                new_name = os.path.join(root, file["url"])
+                os.rename(old_name, new_name)
+
     def change_dir(self):
         self.main_scroll = 0
         self.main_scroll_offset = 2
-        self.main_cursor_x = 0
         self.main_cursor_y = 0
         self.files = []
-        self.menu = "main"
         self.selected = []
         root = self.dirs[self.dir_cursor]
         for file in os.listdir(root):
@@ -344,6 +361,32 @@ class Id3Edit:
             return False
         return True
 
+    def modified(self, file, column):
+        if column == 0:
+            return file["url"] != file["old_url"]
+        elif column == 1:
+            return file["id3"].tag.album != file["old_album"]
+        elif column == 2:
+            return file["id3"].tag.track_num != file["old_track"]
+        elif column == 3:
+            return file["id3"].tag.artist != file["old_artist"]
+        elif column == 4:
+            return file["id3"].tag.title != file["old_title"]
+        elif column == 5:
+            return file["id3"].tag.genre != file["old_genre"]
+        elif column == 6:
+            return file["id3"].tag.release_date != file["old_release"]
+        elif column == 7:
+            return file["id3"].tag.version != file["old_version"]
+        return False
+
+    def anything_modified(self):
+        for file in self.files:
+            for column in range(self.num_columns):
+                if self.modified(file, column):
+                    return True
+        return False
+
     def draw(self):
         self.screen.erase()
         win = curses.newwin(self.height, self.width)
@@ -384,22 +427,7 @@ class Id3Edit:
             i = 0
             for file in self.files:
                 text = self.just(self.repr_item(column, file), self.adj[column]-1)
-                if column == 0:
-                    modified = file["url"] != file["old_url"]
-                elif column == 1:
-                    modified = file["id3"].tag.album != file["old_album"]
-                elif column == 2:
-                    modified = file["id3"].tag.track_num != file["old_track"]
-                elif column == 3:
-                    modified = file["id3"].tag.artist != file["old_artist"]
-                elif column == 4:
-                    modified = file["id3"].tag.title != file["old_title"]
-                elif column == 5:
-                    modified = file["id3"].tag.genre != file["old_genre"]
-                elif column == 6:
-                    modified = file["id3"].tag.release_date != file["old_release"]
-                elif column == 7:
-                    modified = file["id3"].tag.version != file["old_version"]
+                modified = self.modified(file, column)
 
                 if modified:
                     text = text[:-1]
@@ -465,11 +493,12 @@ class Id3Edit:
 
 
     def main_menu_draw(self):
-        self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<space>": "toggle select", "<c-a>": "select all/none", "e": "edit id3 for selected column", "<c-y>": "copy", "n/p": "next/previous dir", "q": "quit"})
+        self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<space>": "toggle select", "<c-a>": "select all/none", "<c-s>": "save", "e": "edit id3 for selected column", "<c-y>": "copy", "n/p": "next/previous dir", "q": "quit"})
 
     def main_menu_handle_input(self, ch):
         if ch == 'q':
-            self.running = False
+            def f(self): self.running = False
+            self.dialog = {"title":" Really Quit? ", "options":{'y':("Quit", f), 'n': ("Don't quit", None)}}
         elif ch == '<up>':
             if self.main_cursor_y > 0:
                 self.main_cursor_y -= 1
@@ -488,12 +517,28 @@ class Id3Edit:
                 self.main_cursor_x -= 1
         elif ch == 'n':
             if self.dir_cursor < len(self.dirs) - 1:
-                self.dir_cursor += 1
-                self.change_dir()
+                def cd(self):
+                    self.dir_cursor += 1
+                    self.change_dir()
+                def save(self):
+                    self.save()
+                    cd(self)
+                if self.anything_modified():
+                    self.dialog = {"title":" There are Modifications. Really go to next? ", "options":{'s':("Save modifications", save), 'd': ("Discard modifications", cd), 'c': ("Cancel", None)}}
+                else:
+                    cd(self)
         elif ch == 'p':
             if self.dir_cursor > 0:
-                self.dir_cursor -= 1
-                self.change_dir()
+                def cd(self):
+                    self.dir_cursor -= 1
+                    self.change_dir()
+                def save(self):
+                    self.save()
+                    cd(self)
+                if self.anything_modified():
+                    self.dialog = {"title":" There are Modifications. Really go to prev? ", "options":{'s':("Save modifications", save), 'd': ("Discard modifications", cd), 'c': ("Cancel", None)}}
+                else:
+                    cd(self)
         elif ch == ' ':
             self.files[self.main_cursor_y]["selected"] = not self.files[self.main_cursor_y]["selected"]
         elif ch == '<c-a>':
@@ -501,6 +546,9 @@ class Id3Edit:
                 b = self.files[0]["selected"]
                 for f in self.files:
                     f["selected"] = not b
+        elif ch == '<c-s>':
+            self.save()
+            self.change_dir()
         elif ch == '<c-y>':
             self.clipboard = self.repr_item(self.main_cursor_x, self.files[self.main_cursor_y])
         elif ch == 'e':
@@ -508,15 +556,15 @@ class Id3Edit:
                 ss = self.set_selected_set()
                 self.edit_scroll = 0
                 if self.main_cursor_x == 0:
-                    self.edit_value = ["\\u", "(.*)(\.[a-z0-9]+)", "\\(\"%02d \" % c if c else \"\")\\r\\(\" - \" if r and t else \"\")\\t\\2"]
+                    self.edit_value = ["\\u", "(.*)(\.[a-z0-9]+)$", "\\(\"%02d \" % c if c else \"\")\\r\\(\" - \" if r and t else \"\")\\t\\2"]
                 elif self.main_cursor_x == 1:
                     self.edit_value = ["\\l", "(.*)", "\\(d0)"]
                 elif self.main_cursor_x == 2:
                     self.edit_value = ["\\u", "(.*)", "\\(\"%d/%d\"% (num, sel))"]
                 elif self.main_cursor_x == 3:
-                    self.edit_value = ["\\u", "(.*)[ _]-[ _](.*)(\.[a-z0-9]+)", "\\1"]
+                    self.edit_value = ["\\u", "(.*)[ _]-[ _](.*)(\.[a-z0-9]+)$", "\\1"]
                 elif self.main_cursor_x == 4:
-                    self.edit_value = ["\\u", "(.*)[ _]-[ _](.*)(\.[a-z0-9]+)", "\\2"]
+                    self.edit_value = ["\\u", "(.*)[ _]-[ _](.*)(\.[a-z0-9]+)$", "\\2"]
                 elif self.main_cursor_x == 5:
                     self.edit_value = ["\\g", "(.*)", "\\1"]
                 elif self.main_cursor_x == 6:
@@ -528,7 +576,58 @@ class Id3Edit:
                 self.edit_cursor_x1 = [-1, -1, -1]
                 self.menu = "edit"
 
+    def dialog_draw(self):
+        title = self.dialog["title"]
+        options = self.dialog["options"]
+        texts = []
+        for key, value in options.items():
+            texts.append("(%s) %s" % (key, value[0]))
+        h = len(options)+3
+        w = max(len(max(texts, key=len))+25, len(title)+4)
+        y = 6
+        x = 10
+        dialog_win = curses.newwin(h,w,y,x)
+        dialog_win.addch(0,0,curses.ACS_ULCORNER, self.style_edit_ornaments)
+        dialog_win.hline(0,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
+        dialog_win.addch(0,w-1,curses.ACS_URCORNER, self.style_edit_ornaments)
+        dialog_win.addstr(0,int((w-len(title))/2),title, self.style_edit_help_line_val)
+
+        dialog_win.hline(1,1,' ',w-2, self.style_edit_ornaments)
+        dialog_win.hline(2,1,' ',w-2, self.style_edit_help_line_val)
+        dialog_win.hline(3,1,' ',w-2, self.style_edit_help_line_val)
+        dialog_win.hline(4,1,' ',w-2, self.style_edit_ornaments)
+
+        dialog_win.vline(1,0,curses.ACS_VLINE,h-2, self.style_edit_ornaments)
+        dialog_win.vline(1,w-1,curses.ACS_VLINE,h-2, self.style_edit_ornaments)
+        for i in range(len(texts)):
+            dialog_win.addstr(i+2,1,texts[i], self.style_edit_help_line_val)
+
+        dialog_win.addch(h-1,0,curses.ACS_LLCORNER, self.style_edit_ornaments)
+        dialog_win.hline(h-1,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
+        dialog_win.refresh()
+
+
+    def dialog_handle_input(self, ch):
+        options = self.dialog["options"]
+        if ch in options:
+            cmd = options[ch][1]
+            if cmd:
+                cmd(self)
+            self.dialog = None
+
+    def inc_filename(self, name):
+        m = re.match("(.*\()([0-9]+)(\))$", name)
+        if m:
+            return m.group(1) + str(int(m.group(2))+1) + m.group(3)
+        else:
+            return name + "(1)"
+
+
     def perorm_regex(self):
+        root = self.dirs[self.dir_cursor]
+        existing_filenames = set()
+        for file in os.listdir(root):
+            existing_filenames.add(file)
         data = []
         i = 0
         for sel in self.selected:
@@ -562,6 +661,27 @@ class Id3Edit:
                 new_val = cur_val
             data.append((cur_val, new_val, error))
             i = i + 1
+        errors = True
+        num = 0
+        while errors:
+            errors = False
+            data2 = []
+            new_filenames = []
+            for d in data:
+                new_filenames.append(d[1])
+            for d in data:
+                if not errors and new_filenames.count(d[1]) > 1:
+                    f = self.inc_filename(d[1])
+                    data2.append((d[0], f, "duplicate filename"))
+                    num += 1
+                    errors = True
+                elif not errors and d[0] != d[1] and d[1] in existing_filenames:
+                    f = self.inc_filename(d[1])
+                    data2.append((d[0], f, "existing filename"))
+                    errors = True
+                else:
+                    data2.append(d)
+            data = data2
         return data
 
     def get_left_right(self, y):
