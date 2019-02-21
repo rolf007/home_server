@@ -91,11 +91,16 @@ class Id3Edit:
         curses.init_pair(16, 15, curses.COLOR_WHITE)
         self.style_text_center_cursor_modified = curses.color_pair(16)|curses.A_BOLD
 
+        curses.init_pair(17, 15, curses.COLOR_WHITE)
+        self.style_genre_help_cursor = curses.color_pair(17)|curses.A_BOLD
+
 
         self.dir_cursor = 0
         self.dirs = []
         self.dialog = None
         self.menu = "main"
+        self.genre_help = False
+        self.clipboard = None
 
         self.num_columns = 8
         self.pads = []
@@ -155,10 +160,12 @@ class Id3Edit:
                 ch = '<c-s>'
             elif c == 263:
                 ch = '<c-h>'
-            elif c == 0x10:
-                ch = '<c-p>'
-            elif c == 0x19:
-                ch = '<c-y>'
+            elif c == 0x16:
+                ch = '<c-v>'
+            elif c == 0x12:
+                ch = '<c-r>'
+            elif c == 0x07:
+                ch = '<c-g>'
             elif c == 258:
                 ch = '<down>'
             elif c == 259:
@@ -167,6 +174,8 @@ class Id3Edit:
                 ch = '<right>'
             elif c == 260:
                 ch = '<left>'
+            elif c == -1:
+                ch = '<c-c>'
             else:
                 ch = chr(c)
 
@@ -364,6 +373,24 @@ class Id3Edit:
             return False
         return True
 
+    def revert(self, file, column):
+        if column == 0:
+            file["url"] = file["old_url"]
+        elif column == 1:
+            file["id3"].tag.album = file["old_album"]
+        elif column == 2:
+            file["id3"].tag.track_num = file["old_track"]
+        elif column == 3:
+            file["id3"].tag.artist = file["old_artist"]
+        elif column == 4:
+            file["id3"].tag.title = file["old_title"]
+        elif column == 5:
+            file["id3"].tag.genre = file["old_genre"]
+        elif column == 6:
+            file["id3"].tag.release_date = file["old_release"]
+        elif column == 7:
+            file["id3"].tag.version = file["old_version"]
+
     def modified(self, file, column):
         if column == 0:
             return file["url"] != file["old_url"]
@@ -496,7 +523,7 @@ class Id3Edit:
 
 
     def main_menu_draw(self):
-        self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<space>": "toggle select", "<c-a>": "select all/none", "<c-s>": "save", "e": "edit id3 for selected column", "<c-y>": "copy", "n/p": "next/previous dir", "q": "quit"})
+        self.draw_help_line(self.screen, self.height-1, self.width, self.style_help_line_val, {"<space>": "toggle select", "<c-a>": "select all/none", "<c-s>": "save", "e": "edit column", "<c-c>": "copy", "<c-v>": "paste", "<c-r>": "revert", "n/p": "next/previous dir", "q": "quit"})
 
     def main_menu_handle_input(self, ch):
         if ch == 'q':
@@ -552,8 +579,17 @@ class Id3Edit:
         elif ch == '<c-s>':
             self.save()
             self.change_dir()
-        elif ch == '<c-y>':
+        elif ch == '<c-c>':
             self.clipboard = self.repr_item(self.main_cursor_x, self.files[self.main_cursor_y])
+        elif ch == '<c-v>':
+            if self.clipboard:
+                self.set_selected_set()
+                for sel in self.selected:
+                    self.set_item(self.main_cursor_x, sel, self.clipboard)
+        elif ch == '<c-r>':
+            self.set_selected_set()
+            for sel in self.selected:
+                self.revert(sel, self.main_cursor_x)
         elif ch == 'e':
             if self.main_cursor_x != 7:
                 ss = self.set_selected_set()
@@ -664,27 +700,28 @@ class Id3Edit:
                 new_val = cur_val
             data.append((cur_val, new_val, error))
             i = i + 1
-        errors = True
-        num = 0
-        while errors:
-            errors = False
-            data2 = []
-            new_filenames = []
-            for d in data:
-                new_filenames.append(d[1])
-            for d in data:
-                if not errors and new_filenames.count(d[1]) > 1:
-                    f = self.inc_filename(d[1])
-                    data2.append((d[0], f, "duplicate filename"))
-                    num += 1
-                    errors = True
-                elif not errors and d[0] != d[1] and d[1] in existing_filenames:
-                    f = self.inc_filename(d[1])
-                    data2.append((d[0], f, "existing filename"))
-                    errors = True
-                else:
-                    data2.append(d)
-            data = data2
+        if self.main_cursor_x == 0:
+            errors = True
+            num = 0
+            while errors:
+                errors = False
+                data2 = []
+                new_filenames = []
+                for d in data:
+                    new_filenames.append(d[1])
+                for d in data:
+                    if not errors and new_filenames.count(d[1]) > 1:
+                        f = self.inc_filename(d[1])
+                        data2.append((d[0], f, "duplicate filename"))
+                        num += 1
+                        errors = True
+                    elif not errors and d[0] != d[1] and d[1] in existing_filenames:
+                        f = self.inc_filename(d[1])
+                        data2.append((d[0], f, "existing filename"))
+                        errors = True
+                    else:
+                        data2.append(d)
+                data = data2
         return data
 
     def get_left_right(self, y):
@@ -769,7 +806,7 @@ class Id3Edit:
             vacuum = w-len(v)-8
             if vacuum > 0:
                 edit_win.hline(irs_text_y+z, irs_text_x+len(v), " ", vacuum, self.style_edit_ornaments)
-        self.draw_help_line(self.screen, self.height-1, self.width, self.style_edit_help_line_val, {"<c-a>": "Select all", "<tab>": "Input/Search/Replace", "<c-y>":"Copy", "<c-p>":"Paste", "<esc>": "Cancel", "<cr>": "Ok"})
+        self.draw_help_line(self.screen, self.height-1, self.width, self.style_edit_help_line_val, {"<c-a>": "Select all", "<tab>": "Input/Search/Replace", "<c-c>":"Copy", "<c-v>":"Paste", "<c-g>": "Genre help", "<esc>": "Cancel", "<cr>": "Ok"})
         help_lines = [
                 "u = url",
                 "l = album",
@@ -796,11 +833,95 @@ class Id3Edit:
             help_line = help_lines[i]
             edit_help_win.insstr(i, 0, self.just(help_line, w_help), self.style_edit_help_line_val)
             i = i +1
+
+        genre_help_win = None
+        if self.genre_help:
+            genre_help_win = self.genre_help_draw()
+
         edit_win.refresh()
         edit_pad.refresh(self.edit_scroll, 0, y+1, x+1, y+h-6, x+ w-2)
         edit_help_win.refresh()
+        if genre_help_win:
+            genre_help_win.refresh()
+
+    def genre_help_draw(self):
+        h = 30
+        w = 160
+        y = 2
+        x = 10
+        title = " Genres "
+        genre_help_win = curses.newwin(h,w,y,x)
+        genre_help_win.addch(0,0,curses.ACS_ULCORNER, self.style_edit_ornaments)
+        genre_help_win.hline(0,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
+        genre_help_win.addch(0,w-1,curses.ACS_URCORNER, self.style_edit_ornaments)
+        genre_help_win.addstr(0,int((w-len(title))/2),title, self.style_edit_help_line_val)
+
+        for i in range(h-2):
+            genre_help_win.hline(1+i,1,' ',w-2, self.style_edit_ornaments)
+        y = 0
+        x = 0
+        for n in range(192):
+            if n >= 192:
+                break;
+            genre = eyed3.id3.Genre.parse(str(n))
+            name = genre.name
+            id = str(genre.id)
+            if self.genre_help_input:
+                if not self.genre_help_input.lower() in name.lower() and not self.genre_help_input in id:
+                    continue
+            if x == self.genre_help_cursor_x and y == self.genre_help_cursor_y:
+                genre_help_win.addstr(1+y,x*22+1,'(%d)%s' % (n, name),self.style_genre_help_cursor)
+                self.genre_help_value = name
+            else:
+                genre_help_win.addstr(1+y,x*22+1,'(%d)%s' % (n, name),self.style_edit_help_line_val)
+            y += 1
+            if y == h-2:
+                x = x + 1
+                y = 0
+
+        genre_help_win.vline(1,0,curses.ACS_VLINE,h-2, self.style_edit_ornaments)
+        genre_help_win.vline(1,w-1,curses.ACS_VLINE,h-2, self.style_edit_ornaments)
+        genre_help_win.hline(h-1,1,curses.ACS_HLINE,w-2, self.style_edit_ornaments)
+        genre_help_win.addch(h-1,0,curses.ACS_LLCORNER, self.style_edit_ornaments)
+        return genre_help_win
+
+    def genre_help_handle_input(self, ch):
+        if ch == '<esc>':
+            self.genre_help = False
+        elif ch == '<c-g>':
+            self.genre_help = False
+        elif ch == '<bs>':
+            self.genre_help_input = self.genre_help_input[:-1]
+            self.genre_help_cursor_x = 0
+            self.genre_help_cursor_y = 0
+        elif ch == '<cr>':
+            self.edit_insert_text(self.genre_help_value)
+            self.genre_help = False
+        elif ch == '<up>':
+            self.genre_help_cursor_y -= 1
+        elif ch == '<down>':
+            self.genre_help_cursor_y += 1
+        elif ch == '<left>':
+            self.genre_help_cursor_x -= 1
+        elif ch == '<right>':
+            self.genre_help_cursor_x += 1
+
+        elif ch != None and len(ch) == 1 and ch >= ' ' and ch <= '~':
+            self.genre_help_input += ch
+            self.genre_help_cursor_x = 0
+            self.genre_help_cursor_y = 0
+
+    def edit_insert_text(self, txt):
+        y = self.edit_cursor_y
+        left, right = self.get_left_right(y)
+        self.edit_value[y] = self.edit_value[y][:left] + txt + self.edit_value[y][right:]
+        self.edit_cursor_x1[y] = left + len(txt)
+        self.edit_cursor_x0[y] = left + len(txt)
 
     def edit_menu_handle_input(self, ch):
+        if self.genre_help:
+            self.genre_help_handle_input(ch)
+            return
         if ch == '<esc>':
             self.menu = "main"
         elif ch == '<tab>':
@@ -852,20 +973,23 @@ class Id3Edit:
             y = self.edit_cursor_y
             self.edit_cursor_x0[y] = len(self.edit_value[y])
             self.edit_cursor_x1[y] = len(self.edit_value[y])
+        elif ch == '<c-g>':
+            self.genre_help_value = ""
+            self.genre_help_input = ""
+            self.genre_help_cursor_x = 0
+            self.genre_help_cursor_y = 0
+            self.genre_help = not self.genre_help
         elif ch == '<c-a>':
             y = self.edit_cursor_y
             self.edit_cursor_x0[y] = -1
             self.edit_cursor_x1[y] = -1
-        elif ch == '<c-y>':
+        elif ch == '<c-c>':
             y = self.edit_cursor_y
             left, right = self.get_left_right(y)
             self.clipboard = self.edit_value[y][left:right]
-        elif ch == '<c-p>':
-            y = self.edit_cursor_y
-            left, right = self.get_left_right(y)
-            self.edit_value[y] = self.edit_value[y][:left] + self.clipboard + self.edit_value[y][right:]
-            self.edit_cursor_x1[y] = left + len(self.clipboard)
-            self.edit_cursor_x0[y] = left + len(self.clipboard)
+        elif ch == '<c-v>':
+            if self.clipboard:
+                self.edit_insert_text(self.clipboard)
         elif ch == '<cr>':
             self.perform_edit()
             self.menu = "main"
@@ -888,11 +1012,7 @@ class Id3Edit:
                 self.edit_cursor_x1[y] = left
                 self.edit_cursor_x0[y] = self.edit_cursor_x1[y]
         elif ch != None and len(ch) == 1 and ch >= ' ' and ch <= '~':
-            y = self.edit_cursor_y
-            left, right = self.get_left_right(y)
-            self.edit_value[y] = self.edit_value[y][:left] + ch + self.edit_value[y][right:]
-            self.edit_cursor_x1[y] = left + 1
-            self.edit_cursor_x0[y] = left + 1
+            self.edit_insert_text(ch)
 
 
     def replace_backslash_stuff(self, s, file, e, n):
@@ -969,7 +1089,7 @@ class Id3Edit:
         data = self.perorm_regex()
         i = 0
         for sel in self.selected:
-            cur_val, new_val, error =  data[i]
+            cur_val, new_val, error = data[i]
             if not new_val is None:
                 self.set_item(self.main_cursor_x, sel, new_val)
             i = i + 1
@@ -980,6 +1100,6 @@ if __name__ == '__main__':
     argparser.add_argument('mp3s', nargs='+')
     args = argparser.parse_args()
     id3edit = Id3Edit(args.mp3s)
-    s = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    s = signal.signal(signal.SIGINT, lambda sig, frame:None)
     curses.wrapper(id3edit.main)
     s = signal.signal(signal.SIGINT, signal.SIG_IGN)
