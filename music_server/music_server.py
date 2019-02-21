@@ -20,7 +20,7 @@ from os.path import isfile, join
 import pty
 import random
 import re
-import youtube_dl
+import youtube_dl_wrapper
 
 
 home_server_root = os.path.split(sys.path[0])[0]
@@ -31,7 +31,6 @@ sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
 from logger import Logger
 from mkdirp import mkdirp
-from filify import filify
 from fuzzy_substring import fuzzy_substring
 
 class VlcThread():
@@ -111,21 +110,6 @@ def load_collection(logger):
                     music_collection = {**music_collection, **json.load(f)}
     return music_collection
 
-
-class MyLogger(object):
-    def debug(self, msg):
-        pass
-
-    def warning(self, msg):
-        pass
-
-    def error(self, msg):
-        print(msg)
-
-
-def my_hook(d):
-    if d['status'] == 'finished':
-        print('Done downloading, now converting ...')
 
 class Podcaster():
     def __init__(self):
@@ -212,25 +196,58 @@ class MusicCollection():
         self.music_collection = collection
         self.logger.log("music collection loaded %d tracks" % len(self.music_collection))
 
+    def parse_flags(self, query):
+        flags = {"case_sensitive": False, "negate": False, "match_type": "fuzzy"}
+        if query[0] == ':':
+            flags["case_sensitive"] = True
+            query = query[1:]
+        if query[0] == '!':
+            flags["negate"] = True
+            query = query[1:]
+        if query[0] == ',':
+            flags["match_type"] = "exact"
+            query = query[1:]
+        elif query[0] == '/':
+            flags["match_type"] = "regex"
+            query = query[1:]
+        elif query[0] == '-':
+            flags["match_type"] = "range"
+            query = query[1:]
+        return query, flags
+
+
     def play(self, params):
         total_score = {}
-        for keyword in ["title", "artist"]:
-            if keyword in params:
-                for kw in params[keyword]:
-                    for url, music in self.music_collection.items():
-                        collection_kw = music[keyword]
+        for url, music in self.music_collection.items():
+            valid = True
+            score = 0
+            for keyword in ["title", "artist"]:
+                if keyword in params:
+                    collection_kw = music[keyword]
+                    for query_kw in params[keyword]:
                         if not collection_kw:
-                            score = 1000
+                            valid = False
+                            break
+                        query, flags = self.parse_flags(query_kw)
+                        if flags["match_type"] == "exact":
+                            print(query.lower() , collection_kw.lower())
+                            if query.lower() != collection_kw.lower():
+                                valid = False
                         else:
-                            score = fuzzy_substring(kw.lower(), collection_kw.lower())
-                        if url not in total_score:
-                            total_score[url] = 0
-                        total_score[url] += score
+                            score += fuzzy_substring(query_kw.lower(), collection_kw.lower())
+                if not valid:
+                    break
+            if valid:
+                total_score[url] = score
 
-        print("total_score:", total_score)
+        if len(total_score) == 0:
+            return []
         a_min = min(total_score, key=total_score.get)
         best_score = total_score[a_min]
-        return [url for url, score in total_score.items() if score == best_score]
+        play = [url for url, score in total_score.items() if score == best_score]
+        for val in play:
+            print("%s " % val)
+        return play
 
     def getPrettyName(self, url):
         if url in self.music_collection:
@@ -393,48 +410,16 @@ class MusicServer():
         return (200, "playing: '" + self.music_collection.getPrettyName(best_url) + "'")
 
     def play_youtube(self, params):
-        # https://github.com/rg3/youtube-dl
-        # python -m youtube_dl -x --audio-format mp3 gsoNl0MzDFA -o '%(artist)s - %(title)s.%(ext)s'
-        # python -m youtube_dl ytsearch:"metallica jump in the fire" -o 'foo2'
-        #https://github.com/rg3/youtube-dl/commit/6d7359775ae4eef1d1213aae81e092467a2c675c
         if "query" not in params:
             return (404, "if 'source' is 'youtube', 'query' is a required argument to 'play'")
         query = params["query"][0]
-        print("play: '%s'" % query)
-
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'outtmpl': '/tmp/yt.%(ext)s',
-            'logger': MyLogger(),
-            'progress_hooks': [my_hook],
-        }
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info('ytsearch:%s' % query, ie_key='YoutubeSearch')
-            e0 = info["entries"][0]
-            artist = None if "artist" not in e0 or e0["artist"] == None else e0["artist"]
-            alt_title = None if "alt_title" not in e0 or e0["alt_title"] == None else e0["alt_title"]
-            if alt_title:
-                title = alt_title
-            else:
-                title = "unknown" if "title" not in e0 else e0["title"]
-        youtube_path = os.path.join(home_server_config, "youtube")
-        mkdirp(youtube_path)
-        if artist:
-            name = "%s_-_%s.mp3" % (filify(artist), filify(title))
-        else:
-            name = "%s.mp3" % filify(title)
-        filename = os.path.join(youtube_path, name)
-        os.rename("/tmp/yt.mp3", filename)
+        print("youtube query: '%s'" % query)
+        name, filename = youtube_dl_wrapper.youtube_dl_wrapper(query)
         self.enqueue_file(filename, params)
         self.mode = "music"
-        print("playing %s" % name)
+        print("youtube playing: '%s'" % name)
 
-        return (200, "playing name %s" % name)
+        return (200, "playing name '%s'" % name)
 
 
     def shut_down(self):

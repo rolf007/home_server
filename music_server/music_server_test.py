@@ -52,5 +52,24 @@ class TestMusicServer(unittest.TestCase):
         next_song = music_collection.play({"artist": ["metalliac"]})
         self.assertEqual(set(["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3", "/foo/metallica - call of ktulu.mp3"]), set(next_song))
 
+    def test_exact_match(self):
+        logger = Logger("music_server")
+        music_collection = MusicCollection(logger, {
+            "/foo/metallica - jump in the fire.mp3":{ "artist": "metallica", "title": "jump in the fire"},
+            "/foo/iron maiden - the trooper.mp3":{ "artist": "Iron Maiden", "title": "The Trooper"},
+            "/foo/metallica - call of ktulu.mp3":{ "artist": "metallica", "title": "call of ktulu"},
+            "/foo/metallica - orion.mp3":{ "artist": "metallica", "title": "Orion"},
+            "/foo/acdc - for those about to rock.mp3":{ "artist": "acdc", "title": "For Those about to Rock"}
+            })
+        # exact match - typo -> no matches
+        next_song = music_collection.play({"artist": [",metalliac"]})
+        self.assertEqual(set(), set(next_song))
+        # fuzzy match - typo -> multiple matches
+        next_song = music_collection.play({"artist": ["metalliac"]})
+        self.assertEqual(set(["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3", "/foo/metallica - call of ktulu.mp3"]), set(next_song))
+        # exact match - no typo -> multiple matches
+        next_song = music_collection.play({"artist": [",metallica"]})
+        self.assertEqual(set(["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3", "/foo/metallica - call of ktulu.mp3"]), set(next_song))
+
 if __name__ == '__main__':
     unittest.main()
