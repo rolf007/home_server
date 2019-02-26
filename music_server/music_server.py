@@ -293,6 +293,7 @@ class MusicCollection():
                                 valid = False
                         else:
                             score += fuzzy_substring(query_kw.lower(), collection_kw.lower())
+                            score += len(collection_kw)/100.0
                 if not valid:
                     break
             if valid:

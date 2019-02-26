@@ -52,6 +52,16 @@ class TestMusicServer(unittest.TestCase):
         next_song = music_collection.play({"artist": ["metalliac"]})
         self.assertEqual(set(["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3", "/foo/metallica - call of ktulu.mp3"]), set(next_song))
 
+    def test_fuzzy_choose_shortest_match(self):
+        logger = Logger("music_server")
+        music_collection = MusicCollection(logger, {
+            "/foo/metallica - jump in the fire.mp3":{ "artist": "Metallica", "title": "Jump in the fire"},
+            "/foo/van halen - jump.mp3":{ "artist": "Van Halen", "title": "Jump"},
+            "/foo/c64 - jumping jackson.mp3":{ "artist": "C64", "title": "Jumping Jackson"},
+            })
+        next_song = music_collection.play({"title": ["jump"]})
+        self.assertEqual(set(["/foo/van halen - jump.mp3"]), set(next_song))
+
     def test_exact_match(self):
         logger = Logger("music_server")
         music_collection = MusicCollection(logger, {
