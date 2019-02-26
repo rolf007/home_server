@@ -3,21 +3,22 @@
 import os
 import json
 import sys
-import time
 import re
 import requests
 
 home_server_root = os.path.split(sys.path[0])[0]
 sys.path.append(os.path.join(home_server_root, "comm"))
-sys.path.append(os.path.join(home_server_root, "logger"))
+sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
-from logger import Logger
+from micro_service import MicroServiceHandler
 
 class Wiki():
-    def __init__(self):
-        self.logger = Logger("wiki")
-        self.logger.log("started wiki")
-        self.comm = Comm(5006, "wiki", {"wiki": self.wiki}, self.logger)
+    def __init__(self, logger, exc_cb):
+        self.logger = logger
+        self.comm = Comm(5006, "wiki", {"wiki": self.wiki}, self.logger, exc_cb)
+
+    def main_loop(self):
+        print("wiki main loop")
 
     def wiki(self, params):
         query = params["query"][0]
@@ -42,10 +43,5 @@ class Wiki():
         print("wiki shutted down!")
 
 
-wiki = Wiki()
-try:
-    while True:
-        time.sleep(2.0)
-except KeyboardInterrupt:
-    pass
-wiki.shut_down()
+if __name__ == '__main__':
+    MicroServiceHandler("wiki", Wiki)

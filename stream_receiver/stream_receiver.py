@@ -7,17 +7,16 @@ import time
 
 home_server_root = os.path.split(sys.path[0])[0]
 sys.path.append(os.path.join(home_server_root, "comm"))
-sys.path.append(os.path.join(home_server_root, "logger"))
+sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
-from logger import Logger
+from micro_service import MicroServiceHandler
 
 devnull = open(os.devnull, 'w')
 
 class StreamReceiver():
-    def __init__(self):
-        self.logger = Logger("streamer")
-        self.logger.log("started streamer")
-        self.comm = Comm(5005, "stream_receiver", {"multicast": self.multicast, "radio": self.radio}, self.logger)
+    def __init__(self, logger, exc_cb):
+        self.logger = logger
+        self.comm = Comm(5005, "stream_receiver", {"multicast": self.multicast, "radio": self.radio}, self.logger, exc_cb)
         self.radio = RadioReceiver()
         self.multicast_receiver = MulticastReceiver()
         self.running = True
@@ -34,10 +33,6 @@ class StreamReceiver():
     def multicast(self, params):
         self.set_source("multicast")
         return (200, "switched to multicast ok")
-
-    def main_loop(self):
-        while self.running:
-            time.sleep(1)
 
     def shut_down(self):
         self.set_source(None)
@@ -119,9 +114,5 @@ class RadioReceiver():
         print("vlc radio stopped: %s %s" % self.p.communicate())
         self.p = None
 
-stream_receiver = StreamReceiver()
-try:
-    stream_receiver.main_loop()
-except KeyboardInterrupt:
-    pass
-stream_receiver.shut_down()
+if __name__ == '__main__':
+    MicroServiceHandler("streamer", StreamReceiver)

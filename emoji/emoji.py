@@ -8,11 +8,11 @@ import time
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
-sys.path.append(os.path.join(home_server_root, "logger"))
 sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
-from logger import Logger
 from fuzzy_substring import fuzzy_substring
+from micro_service import MicroServiceHandler
+
 #import unicodedata
 #print(unicodedata.name(chr(128514)))
 #FACE WITH TEARS OF JOY
@@ -77,10 +77,9 @@ class EmojiParser():
 
 class Emoji():
 
-    def __init__(self):
-        self.logger = Logger("emoji")
-        self.logger.log("Started emoji")
-        self.comm = Comm(5004, "emoji", {"receive": self.receive, "send": self.send}, self.logger)
+    def __init__(self, logger, exc_cb):
+        self.logger = logger
+        self.comm = Comm(5004, "emoji", {"receive": self.receive, "send": self.send}, self.logger, exc_cb)
         self.emoji_parser = EmojiParser(self.logger.log)
     # http://127.0.0.1:5004/receive?text=uni%F0%9F%A6%84corn
     def receive(self, params):
@@ -110,10 +109,4 @@ class Emoji():
         self.comm.shut_down()
 
 if __name__ == '__main__':
-    emoji = Emoji()
-    try:
-        while True:
-            time.sleep(2.0)
-    except KeyboardInterrupt:
-        pass
-    emoji.shut_down()
+    MicroServiceHandler("emoji", Emoji)

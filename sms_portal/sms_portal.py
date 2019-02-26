@@ -18,27 +18,25 @@ import time
 import urllib
 import re
 
-
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
-sys.path.append(os.path.join(home_server_root, "logger"))
+sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
 from comm import UnicastListener
-from logger import Logger
 from argpkarse import ArgpKarse, ArgpKarseError
+from micro_service import MicroServiceHandler
 
 ##res = requests.get("https://api.suresms.com/Script/SendSMS.aspx?login=Rolf&password=xxxxxxxx&to=+4526857540&Text=%s" % "outofmoney", timeout=2)
 ##print("res '%s'" % res)
 ##exit(0)
 
 class SmsPortal():
-    def __init__(self):
-        self.logger = Logger("sms_portal")
-        self.logger.log("started SmsPortal")
-        self.comm = Comm(5003, "sms_portal", {"send_sms": self.send_sms}, self.logger)
+    def __init__(self, logger, exc_cb):
+        self.logger = logger
+        self.comm = Comm(5003, "sms_portal", {"send_sms": self.send_sms}, self.logger, exc_cb)
         self.external_port = 5100
-        self.unicast_listener = UnicastListener(self.sms_received, self.external_port, self.logger)
+        self.unicast_listener = UnicastListener(self.sms_received, self.external_port, self.logger, exc_cb)
         self.sms_password = self.load_obj("sms_password")[0]
         parser = argparse.ArgumentParser()
         parser.add_argument('--pay', action='store_true')
@@ -59,6 +57,7 @@ class SmsPortal():
                 "pod": self.Cmd_podcast(self.logger, self.comm, 0, False, 0),
                 "wiki": self.Cmd_wiki(self.logger, self.comm, 1, False, 0)
                 }
+
     def fixup_phone_number(self, phonenumber):
         fixed_number = phonenumber
         if re.match("^  [0-9]{10}$", phonenumber):
@@ -314,10 +313,4 @@ class SmsPortal():
         self.unicast_listener.stop()
 
 if __name__ == '__main__':
-    sms_portal = SmsPortal()
-    try:
-        while True:
-            time.sleep(2.0)
-    except KeyboardInterrupt:
-        pass
-    sms_portal.shut_down()
+    MicroServiceHandler("sms_portal", SmsPortal)

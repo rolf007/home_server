@@ -11,9 +11,9 @@ import time
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
-sys.path.append(os.path.join(home_server_root, "logger"))
+sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
-from logger import Logger
+from micro_service import MicroServiceHandler
 
 devnull = open(os.devnull, 'w')
 
@@ -202,12 +202,11 @@ class PingThread(threading.Thread):
         self.join()
 
 class PingServer():
-    def __init__(self):
+    def __init__(self, logger, exc_cb):
+        self.logger = logger
         ip_list = self.load_obj("ip_list")
         alarms = self.load_obj("alarms")
-        self.logger = Logger("ping_server")
-        self.logger.log("Started ping server")
-        self.comm = Comm(5002, "ping_server", {"status": self.status, "log": self.log, "reset": self.reset}, self.logger)
+        self.comm = Comm(5002, "ping_server", {"status": self.status, "log": self.log, "reset": self.reset}, self.logger, exc_cb)
         self.ping_thread = PingThread(60, None)
         for ip in ip_list:
             self.ping_thread.add_ip(ip["name"], ip["ip"])
@@ -250,10 +249,4 @@ class PingServer():
 
 
 if __name__ == '__main__':
-    ping_server = PingServer()
-    try:
-        while True:
-            time.sleep(2.0)
-    except KeyboardInterrupt:
-        pass
-    ping_server.shut_down()
+    MicroServiceHandler("ping_server", PingServer)

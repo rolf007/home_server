@@ -5,17 +5,14 @@ import threading
 home_server_root = os.path.split(sys.path[0])[0]
 sys.path.append(os.path.join(home_server_root, "comm"))
 sys.path.append(os.path.join(home_server_root, "keypress"))
-sys.path.append(os.path.join(home_server_root, "logger"))
 from comm import Comm
 from keypress import KeyPress
 from morse_maker import MorseMaker
-from logger import Logger
 
 class Radio():
-    def __init__(self, inputter):
-        self.logger = Logger("radio")
-        self.logger.log("Started radio")
-        self.comm = Comm(5000, "player", {}, self.logger)
+    def __init__(self, logger, exc_cb, inputter):
+        self.logger = logger
+        self.comm = Comm(5000, "player", {}, self.logger, exc_cb)
         self.inputter = inputter
         self.menu_linger_time = 5.0
         self.main_menu = KeyPress.mkUnion([

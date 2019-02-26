@@ -7,8 +7,9 @@ import time
 import urllib.parse
 
 class UnicastListener():
-    def __init__(self, cb, port, logger):
+    def __init__(self, cb, port, logger, exc_cb):
         self.cb = cb
+        self.exc_cb = exc_cb
         self.logger = logger
         self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -53,6 +54,8 @@ class UnicastListener():
                 connectionSocket.close()
             except socket.timeout:
                 pass
+            except:
+                self.exc_cb(sys.exc_info())
         self.logger.log("closing serverSocket")
         self.serverSocket.close()
 
@@ -92,9 +95,10 @@ class UnicastSender():
             return (521, "Connection refused!")
 
 class MulticastListener():
-    def __init__(self, cb, logger):
+    def __init__(self, cb, logger, exc_cb):
         self.cb = cb
         self.logger = logger
+        self.exc_cb = exc_cb
         self.running = True
         mcast_grp = '224.1.1.1'
         mcast_port = 5007
@@ -112,11 +116,11 @@ class MulticastListener():
         mreq = struct.pack("4sl", socket.inet_aton(mcast_grp), socket.INADDR_ANY)
 
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-        self.thread = threading.Thread(target=self.runme, args=())
+        self.thread = threading.Thread(target=self.run, args=())
         #self.thread.daemon = True
         self.thread.start()
 
-    def runme(self):
+    def run(self):
         while self.running:
             try:
                 r = self.sock.recv(10240)
@@ -124,6 +128,8 @@ class MulticastListener():
                 time.sleep(1)
             except socket.timeout:
                 pass
+            except:
+                self.exc_cb(sys.exc_info())
         self.logger.log("closing multicast socket")
         self.sock.close()
 
@@ -150,37 +156,30 @@ class MulticastSender():
         bb = bytes(str(msg), 'ascii')
         sock.sendto(bb, (mcast_grp, mcast_port))
 
-    def shut_down(self):
-        pass
-
-
 class Comm():
-    def __init__(self, port, service_name, functions, logger, try_for_a_while = 10):
+    def __init__(self, port, service_name, functions, logger, exc_cb):
         self.logger = logger
+        self.port = port
+        self.service = service_name
+        self.functions = functions
+        self.others = {}
         self.logger.log("logger just started")
         ok = False
         while not ok:
             try:
                 self.ip = self.get_ip()
-                self.port = port
-                self.service = service_name
-                self.functions = functions
-                self.others = {}
-                self.multicast_listener = MulticastListener(lambda data: self.mc_received(data), self.logger)
+                self.multicast_listener = MulticastListener(lambda data: self.mc_received(data), self.logger, exc_cb)
                 self.multicast_sender = MulticastSender(self.logger)
-                self.unicast_listener = UnicastListener(self.uc_received, self.port, self.logger)
+                self.unicast_listener = UnicastListener(self.uc_received, self.port, self.logger, exc_cb)
                 self.unicast_sender = UnicastSender(self.logger)
-                start_sleep = random.randint(500, 1000)/1000.0
-                self.startup_timer = threading.Timer(start_sleep, self.startup)
-                self.startup_timer.start()
-                self.im_here_timer = None
                 ok = True
-            except Exception as e:
-                self.logger.log("error: %s" % e)
+            except OSError:
+                self.logger.log("waiting for network connection")
                 time.sleep(1)
-                try_for_a_while -= 1
-                if try_for_a_while == 0:
-                    raise e
+        start_sleep = random.randint(500, 1000)/1000.0
+        self.startup_timer = threading.Timer(start_sleep, self.startup)
+        self.startup_timer.start()
+        self.im_here_timer = None
 
     def get_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -237,10 +236,8 @@ class Comm():
         return (503, "Service '%s' not available." % service)
 
     def shut_down(self):
-        if self.port:
-            self.unicast_listener.stop()
-        self.multicast_listener.stop()
-        self.multicast_sender.shut_down()
         self.startup_timer.cancel()
         self.im_here_timer.cancel()
+        self.unicast_listener.stop()
+        self.multicast_listener.stop()
 

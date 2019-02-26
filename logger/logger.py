@@ -32,4 +32,3 @@ class Logger():
         else:
             with open(self.log_file, 'a+') as f:
                 f.write(line + '\n')
-

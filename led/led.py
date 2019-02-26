@@ -8,9 +8,9 @@ import time
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
-sys.path.append(os.path.join(home_server_root, "logger"))
+sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
-from logger import Logger
+from micro_service import MicroServiceHandler
 
 class LedController():
     class Led():
@@ -101,13 +101,12 @@ class LedController():
 
 
 
-    def __init__(self, dt, host_mode):
+    def __init__(self, logger, exc_cb, dt, host_mode):
         self.dt = dt
         self.host_mode = host_mode
-        self.logger = Logger("led")
-        self.logger.log("Started leds")
+        self.logger = logger
         self.logger.log("host_mode = %s" % host_mode)
-        self.comm = Comm(5008, "led", {"set": self.set_leds, }, self.logger)
+        self.comm = Comm(5008, "led", {"set": self.set_leds, }, self.logger, exc_cb)
         self.startup_timer = None
         self.num_leds = 8
         self.num_layers = 3
@@ -381,10 +380,4 @@ if __name__ == '__main__':
     except (ImportError, RuntimeError):
         import pygame
         host_mode = True
-    led_controller = LedController(0.01, host_mode)
-    try:
-        while True:
-            time.sleep(2.0)
-    except KeyboardInterrupt:
-        pass
-    led_controller.shut_down()
+    MicroServiceHandler("led", LedController, 0.01, host_mode)

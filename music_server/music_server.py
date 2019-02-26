@@ -22,16 +22,14 @@ import random
 import re
 import youtube_dl_wrapper
 
-
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
-sys.path.append(os.path.join(home_server_root, "logger"))
 sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
-from logger import Logger
 from mkdirp import mkdirp
 from fuzzy_substring import fuzzy_substring
+from micro_service import MicroServiceHandler
 
 class VlcThread():
     def __init__(self, logger):
@@ -326,14 +324,15 @@ class MusicCollection():
             return "unknown2"
 
 class MusicServer():
-    def __init__(self):
-        self.logger = Logger("music_server")
+    def __init__(self, logger, exc_cb):
+        self.logger = logger
         self.logger.log("loading music collection...")
         self.music_collection = MusicCollection(self.logger, load_collection(self.logger))
         self.vlc_thread = VlcThread(self.logger)
         self.podcaster = Podcaster()
-        self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast, "skip": self.skip, "stop": self.stop, "tag": self.tag}, self.logger)
+        self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast, "skip": self.skip, "stop": self.stop, "tag": self.tag}, self.logger, exc_cb)
         self.mode = "stopped"
+
 
 #http://127.0.0.1:5001/skip?next=3
 #http://127.0.0.1:5001/skip?prev=1
@@ -484,10 +483,4 @@ class MusicServer():
         print("music_server shutted down!")
 
 if __name__ == '__main__':
-    music_server = MusicServer()
-    try:
-        while True:
-            time.sleep(2.0)
-    except KeyboardInterrupt:
-        pass
-    music_server.shut_down()
+    MicroServiceHandler("music_server", MusicServer)
