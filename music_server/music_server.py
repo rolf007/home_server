@@ -61,26 +61,26 @@ class VlcThread():
         self.p.stdin.flush()
         return self.get_stdout()
 
-    def play(self, filenames, enqueue):
+    def enqueue(self, filenames, enqueue_mode):
         if filenames == []:
             return
         status = self.get_status()
-        if enqueue == 'q': # enqueue at end of playlist
+        if enqueue_mode == 'q': # enqueue at end of playlist
             if status == "stopped":
                 out = self.remote_control('add file://%s' % filenames[0])
                 filenames = filenames[1:]
             for filename in filenames:
                 out = self.remote_control('enqueue file://%s' % filename)
-        elif enqueue == 'c': # clear playlist. Then play this
+        elif enqueue_mode == 'c': # clear playlist. Then play this
             out = self.remote_control('clear')
             out = self.remote_control('add file://%s' % filenames[0])
             filenames = filenames[1:]
             for filename in filenames:
                 out = self.remote_control('enqueue file://%s' % filename)
-        elif enqueue == 'n': # play NOW
+        elif enqueue_mode == 'n': # play NOW
             cur_id = self.get_cur_playlist_id()
             if cur_id == None:
-                self.play(filenames, 'q')
+                self.enqueue(filenames, 'q')
             else:
                 out = self.remote_control('add file://%s' % filenames[0])
                 last_id = self.get_last_playlist_id()
@@ -91,10 +91,9 @@ class VlcThread():
                     out = self.remote_control('enqueue file://%s' % filename)
                     last_id = self.get_last_playlist_id()
                     out = self.remote_control('move %d %d' % (last_id, id))
-
-        elif enqueue == 'x': # play next
+        elif enqueue_mode == 'x': # play next
             if status == "stopped":
-                self.play(filenames, 'n')
+                self.enqueue(filenames, 'n')
             else:
                 last_id = self.get_cur_playlist_id()
                 for filename in filenames:
@@ -167,6 +166,20 @@ def load_collection(logger):
                 with open(full_path) as f:
                     music_collection = {**music_collection, **json.load(f)}
     return music_collection
+
+def load_playlists(logger):
+    playlist_path = os.path.join(home_server_config, "playlists")
+    playlists = {}
+
+    directory = os.fsencode(playlist_path)
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith(b'.json'):
+                full_path = os.path.join(root, file)
+                logger.log("found playlist file %s" % file)
+                with open(full_path) as f:
+                    playlists = {**playlists, **json.load(f)}
+    return playlists
 
 
 class Podcaster():
@@ -274,13 +287,13 @@ class MusicCollection():
         return query, flags
 
 
-    def play(self, params):
+    def resolve_query(self, params):
         total_score = {}
         for url, music in self.music_collection.items():
             valid = True
             score = 0
-            for keyword in ["title", "artist"]:
-                if keyword in params:
+            for keyword in ["title", "artist", "album", "genre", "release"]:
+                if keyword in params and keyword in music:
                     collection_kw = music[keyword]
                     for query_kw in params[keyword]:
                         if not collection_kw:
@@ -304,8 +317,6 @@ class MusicCollection():
         a_min = min(total_score, key=total_score.get)
         best_score = total_score[a_min]
         play = [url for url, score in total_score.items() if score == best_score]
-        for val in play:
-            print("%s " % val)
         return play
 
     def getPrettyName(self, url):
@@ -329,6 +340,7 @@ class MusicServer():
         self.logger = logger
         self.logger.log("loading music collection...")
         self.music_collection = MusicCollection(self.logger, load_collection(self.logger))
+        self.playlists = load_playlists(self.logger)
         self.vlc_thread = VlcThread(self.logger)
         self.podcaster = Podcaster()
         self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast, "skip": self.skip, "stop": self.stop, "tag": self.tag}, self.logger, exc_cb)
@@ -365,10 +377,10 @@ class MusicServer():
                     return (404, "can't 'skip'. No current podcast playing.")
                 ret, filename = self.podcaster.skip_to(cur + delta)
             if filename:
-                self.vlc_thread.play([filename], 'c')
+                self.vlc_thread.enqueue([filename], 'c')
             return ret
         elif self.mode == "music":
-            return (200, "skipped music")
+            return (200, "skipping music not implemented yet")
         else:
             return (404, "Can't skip. Nothing is playing.")
 
@@ -382,7 +394,7 @@ class MusicServer():
     def podcast(self, params):
         ret, filename = self.podcaster.podcast(params)
         if filename:
-            self.vlc_thread.play([filename], 'c')
+            self.vlc_thread.enqueue([filename], 'c')
             self.mode = "podcast"
         return ret
 
@@ -451,13 +463,15 @@ class MusicServer():
             source = "collection"
         if source == "collection":
             return self.play_collection(params)
-        if source == "youtube":
+        elif source == "youtube":
             return self.play_youtube(params)
-        return (404, "Source must be 'collection' or 'youtube'")
+        elif source == "list":
+            return self.play_list(params)
+        return (404, "Source must be 'collection', 'youtube' or 'list'")
 
     def play_collection(self, params):
-        filenames = self.music_collection.play(params)
-        self.vlc_thread.play(filenames, 'c')
+        filenames = self.music_collection.resolve_query(params)
+        self.vlc_thread.enqueue(filenames, 'c')
         self.mode = "music"
         if len(filenames) == 1:
             return (200, "playing: '%s'" % self.music_collection.getPrettyName(filenames[0]))
@@ -470,11 +484,27 @@ class MusicServer():
         query = params["query"][0]
         print("youtube query: '%s'" % query)
         name, filename = youtube_dl_wrapper.youtube_dl_wrapper(query)
-        self.vlc_thread.play([filename], 'c')
+        self.vlc_thread.enqueue([filename], 'c')
         self.mode = "music"
         print("youtube playing: '%s'" % name)
 
         return (200, "playing name '%s'" % name)
+
+    def play_list(self, params):
+        if "query" not in params:
+            return (404, "if 'source' is 'list', 'query' is a required argument to 'play'")
+        query = params["query"][0]
+        if query not in self.playlists:
+            return (404, "unknown playlist '%s'" % query)
+        playlist = self.playlists[query]
+        qs = playlist["queries"]
+        sort = None if "sort" not in playlist else playlist["sort"]
+        filenames = []
+        for q in qs:
+            filenames += self.music_collection.resolve_query(q)
+        if sort == "shuffle":
+            random.shuffle(filenames)
+        return (200, "playing list '%s' containing '%d' songs" % (query, len(filenames)))
 
 
     def shut_down(self):
