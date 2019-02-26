@@ -11,8 +11,8 @@ async def handle(request):
   <input type="hidden" name="receivedutcdatetime" value="time" />
   <input type="hidden" name="receivedfromphonenumber" value="12345678" />
   <input type="hidden" name="receivedbyphonenumber" value="87654321" />
-  <input type="hidden" name="body" value="p .r ulf lundell" />
-  <button type="submit">Ulf Lundell</button>
+  <input type="hidden" name="body" value="pl svensk" />
+  <button type="submit">Ulf Lundell & Bo Kasper</button>
 </form>
 
 <form action="http://192.168.0.100:5100/suresms" target="dummyframe">

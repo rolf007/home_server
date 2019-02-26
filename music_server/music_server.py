@@ -512,7 +512,6 @@ class MusicServer():
         self.vlc_thread.enqueue([filename], 'c')
         self.mode = "music"
         print("youtube playing: '%s'" % name)
-
         return (200, "playing name '%s'" % name)
 
     def play_list(self, params):
@@ -529,6 +528,7 @@ class MusicServer():
             filenames += self.music_collection.resolve_query(q)
         if sort == "shuffle":
             random.shuffle(filenames)
+        self.vlc_thread.enqueue(filenames, 'c')
         return (200, "playing list '%s' containing '%d' songs" % (query, len(filenames)))
 
 

@@ -49,6 +49,7 @@ class SmsPortal():
                 "p": self.Cmd_p(self.logger, self.comm, 0, False, 0),
                 "py": self.Cmd_py(self.logger, self.comm, 0, False, 0),
                 "pl": self.Cmd_pl(self.logger, self.comm, 0, False, 0),
+                "stop": self.Cmd_stop(self.logger, self.comm, 0, False, 0),
                 "er": self.Cmd_emoji_receive(self.logger, self.comm, 1, False, 0),
                 "es": self.Cmd_emoji_send(self.logger, self.comm, 1, False, 0),
                 "ping": self.Cmd_ping(self.logger, self.comm, 1, True, 0),
