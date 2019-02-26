@@ -24,7 +24,7 @@ class RaspberryInputter():
         gpio.output(LOAD,1)
         gpio.output(LATCH,0)
         gpio.output(CLK,0)
-        old_butts = (0,0,0,0,0,0,0,0)
+        self.old_butts = (0,0,0,0,0,0,0,0)
 
     def send_bit(b):
         time.sleep(0.01)
@@ -105,25 +105,25 @@ class RaspberryInputter():
     def main_loop(self):
         time.sleep(0.02)
         butts = self.pop_NAD_button()
-        if butts != old_butts:
-            if butts[0] and not old_butts[0]: self.runner.key_input('A', True)
-            if not butts[0] and old_butts[0]: self.runner.key_input('a', False)
-            if butts[1] and not old_butts[1]: self.runner.key_input('B', True)
-            if not butts[1] and old_butts[1]: self.runner.key_input('b', False)
-            if butts[2] and not old_butts[2]: self.runner.key_input('C', True)
-            if not butts[2] and old_butts[2]: self.runner.key_input('c', False)
-            if butts[3] and not old_butts[3]: self.runner.key_input('D', True)
-            if not butts[3] and old_butts[3]: self.runner.key_input('d', False)
-            if butts[4] and not old_butts[4]: self.runner.key_input('E', True)
-            if not butts[4] and old_butts[4]: self.runner.key_input('e', False)
-            if butts[5] and not old_butts[5]: self.runner.key_input('F', True)
-            if not butts[5] and old_butts[5]: self.runner.key_input('f', False)
-            if butts[6] and not old_butts[6]: self.runner.key_input('G', True)
-            if not butts[6] and old_butts[6]: self.runner.key_input('g', False)
-            if butts[7] and not old_butts[7]: self.runner.key_input('H', True)
-            if not butts[7] and old_butts[7]: self.runner.key_input('h', False)
+        if butts != self.old_butts:
+            if butts[0] and not self.old_butts[0]: self.runner.key_input('A', True)
+            if not butts[0] and self.old_butts[0]: self.runner.key_input('a', False)
+            if butts[1] and not self.old_butts[1]: self.runner.key_input('B', True)
+            if not butts[1] and self.old_butts[1]: self.runner.key_input('b', False)
+            if butts[2] and not self.old_butts[2]: self.runner.key_input('C', True)
+            if not butts[2] and self.old_butts[2]: self.runner.key_input('c', False)
+            if butts[3] and not self.old_butts[3]: self.runner.key_input('D', True)
+            if not butts[3] and self.old_butts[3]: self.runner.key_input('d', False)
+            if butts[4] and not self.old_butts[4]: self.runner.key_input('E', True)
+            if not butts[4] and self.old_butts[4]: self.runner.key_input('e', False)
+            if butts[5] and not self.old_butts[5]: self.runner.key_input('F', True)
+            if not butts[5] and self.old_butts[5]: self.runner.key_input('f', False)
+            if butts[6] and not self.old_butts[6]: self.runner.key_input('G', True)
+            if not butts[6] and self.old_butts[6]: self.runner.key_input('g', False)
+            if butts[7] and not self.old_butts[7]: self.runner.key_input('H', True)
+            if not butts[7] and self.old_butts[7]: self.runner.key_input('h', False)
             #print(butts)
-        old_butts = butts
+        self.old_butts = butts
 
     def shut_down(self):
         self.runner.shut_down()

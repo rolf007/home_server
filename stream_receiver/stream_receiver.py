@@ -16,7 +16,7 @@ devnull = open(os.devnull, 'w')
 class StreamReceiver():
     def __init__(self, logger, exc_cb):
         self.logger = logger
-        self.comm = Comm(5005, "stream_receiver", {"multicast": self.multicast, "radio": self.radio, "off", self.off}, self.logger, exc_cb)
+        self.comm = Comm(5005, "stream_receiver", {"multicast": self.multicast, "radio": self.radio, "off": self.off}, self.logger, exc_cb)
         self.radio = RadioReceiver()
         self.multicast_receiver = MulticastReceiver()
         self.running = True
@@ -37,7 +37,7 @@ class StreamReceiver():
         return (200, "switched to multicast ok")
 
 # http://127.0.0.1:5005/off
-    def multicast(self, params):
+    def off(self, params):
         self.set_source(None)
         return (200, "switched off")
 
