@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import sys
 import threading
@@ -5,9 +7,11 @@ import threading
 home_server_root = os.path.split(sys.path[0])[0]
 sys.path.append(os.path.join(home_server_root, "comm"))
 sys.path.append(os.path.join(home_server_root, "keypress"))
+sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
 from keypress import KeyPress
 from morse_maker import MorseMaker
+from micro_service import MicroServiceHandler
 
 class Radio():
     def __init__(self, logger, exc_cb, inputter):
@@ -190,3 +194,12 @@ class Radio():
             self.startup_timer.cancel()
         self.comm.shut_down()
         self.inputter.shut_down()
+
+if __name__ == '__main__':
+    try:
+        from raspberry_inputter import RaspberryInputter
+        inputter = RaspberryInputter()
+    except (ImportError, RuntimeError):
+        from pygame_inputter import PyGameInputter
+        inputter = PyGameInputter()
+    MicroServiceHandler("radio", Radio, inputter)

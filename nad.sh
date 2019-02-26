@@ -2,7 +2,7 @@
 if [ "$1" = "start" ]; then
 	screen -dmS stream_receiver "stream_receiver/stream_receiver.py"
 	screen -dmS led "led/led.py"
-	screen -dmS radio "keypress/raspberry_radio.py"
+	screen -dmS radio "keypress/radio.py"
 	screen -ls
 elif [ "$1" = "stop" ]; then
 	for line in $(screen -ls | grep "(Detached)" | sed -e 's/\s*\(\S\+\)\s.*/\1/'); do
