@@ -48,6 +48,7 @@ class SmsPortal():
         self.sms_cmds = {
                 "p": self.Cmd_p(self.logger, self.comm, 0, False, 0),
                 "py": self.Cmd_py(self.logger, self.comm, 0, False, 0),
+                "pl": self.Cmd_pl(self.logger, self.comm, 0, False, 0),
                 "er": self.Cmd_emoji_receive(self.logger, self.comm, 1, False, 0),
                 "es": self.Cmd_emoji_send(self.logger, self.comm, 1, False, 0),
                 "ping": self.Cmd_ping(self.logger, self.comm, 1, True, 0),
@@ -129,6 +130,28 @@ class SmsPortal():
             res = self.comm.call("led", "set", {"anim": ["mp"]})
             return res
 
+# http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=pl%20best%20of%20metal
+#sms: 'pl best of metal'
+    class Cmd_pl(Cmd):
+        def exe(self):
+            res = self.comm.call("music_server", "play", {"query": [self.args.remain], "source": ["list"]})
+            if res[0] != 200:
+                return res
+            res = self.comm.call("stream_receiver", "multicast", {})
+            res = self.comm.call("led", "set", {"anim": ["mp"]})
+            return res
+
+# http://192.168.0.100:5100/suresms?receivedutcdatetime=time&receivedfromphonenumber=12345678&receivedbyphonenumber=87654321&body=stop
+#sms: 'stop'
+    class Cmd_stop(Cmd):
+        def exe(self):
+            res = self.comm.call("music_server", "stop", {})
+            if res[0] != 200:
+                return res
+            res = self.comm.call("stream_receiver", "off", {})
+            res = self.comm.call("led", "set", {"anim": ["off"]})
+            return res
+
     class Cmd_emoji_receive(Cmd):
         def exe(self):
             res = self.comm.call("emoji", "receive", {"text": [self.args.remain]})
@@ -194,16 +217,11 @@ class SmsPortal():
     class Cmd_podcast(Cmd):
         def exe(self):
             res = (404, "unknown podcast command '%s'" % self.args.remain)
-            if self.args.remain == "next":
-                res = self.comm.call("music_server", "podcast", {"next": ["1"]})
-            elif self.args.remain == "prev":
-                res = self.comm.call("music_server", "podcast", {"prev": ["1"]})
-            else:
-                splt = self.args.remain.split(' ')
-                if len(splt) == 1:
-                    res = self.comm.call("music_server", "podcast", {"program": [splt[0]]})
-                elif len(splt) == 2:
-                    res = self.comm.call("music_server", "podcast", {"program": [splt[0]], "episode": [splt[1]]})
+            splt = self.args.remain.split(' ')
+            if len(splt) == 1:
+                res = self.comm.call("music_server", "podcast", {"program": [splt[0]]})
+            elif len(splt) == 2:
+                res = self.comm.call("music_server", "podcast", {"program": [splt[0]], "episode": [splt[1]]})
 
             if res[0] != 200:
                 return res

@@ -43,7 +43,7 @@ def scan_collection(scan_path):
                         "artist":audiofile.tag.artist,
                         "bpm":audiofile.tag.bpm,
                         "genre":str(audiofile.tag.genre),
-                        "release_date":str(audiofile.tag.release_date),
+                        "release":str(audiofile.tag.release_date),
                         "title":audiofile.tag.title,
                         "track_num":audiofile.tag.track_num
                         }

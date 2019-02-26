@@ -231,6 +231,15 @@ class LedController():
             self.leds[5][0].set_anim([("set",(10,0,0,255,255)), ("repeat",0), ("fade",1,(0,0,0,0,255)), ("fade",1,(10,0,0,255,255)), ("loop",)])
             self.leds[6][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[7][0].set_anim([("set",(0,0,0,0,255))])
+        elif anim == "off"
+            self.leds[0][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[1][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[2][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[3][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[4][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[5][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[6][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[7][0].set_anim([("set",(0,0,0,0,255))])
         elif anim == "radio_menu":
             self.leds[0][1].set_anim([("set",(0,0,255,0,255))])
             self.leds[1][1].set_anim([("set",(0,0,255,0,255))])
@@ -283,7 +292,6 @@ class LedController():
             self.leds[5][1].set_anim([("set",(0,0,0,0,0))])
             self.leds[6][1].set_anim([("set",(0,0,0,0,0))])
             self.leds[7][1].set_anim([("set",(0,0,0,0,0))])
-
         elif anim == "knightrider":
             period = 1.35
             t = 0.6

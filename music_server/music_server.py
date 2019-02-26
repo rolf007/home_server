@@ -31,6 +31,12 @@ from mkdirp import mkdirp
 from fuzzy_substring import fuzzy_substring
 from micro_service import MicroServiceHandler
 
+def safe_to_int(s):
+    try:
+        return int(s)
+    except:
+        return None
+
 class VlcThread():
     def __init__(self, logger):
         self.logger = logger
@@ -269,11 +275,11 @@ class MusicCollection():
 
     def parse_flags(self, query):
         flags = {"case_sensitive": False, "negate": False, "match_type": "fuzzy"}
-        if query[0] == ':':
-            flags["case_sensitive"] = True
-            query = query[1:]
         if query[0] == '!':
             flags["negate"] = True
+            query = query[1:]
+        if query[0] == ':':
+            flags["case_sensitive"] = True
             query = query[1:]
         if query[0] == ',':
             flags["match_type"] = "exact"
@@ -286,6 +292,15 @@ class MusicCollection():
             query = query[1:]
         return query, flags
 
+    def negate(self, expr, flags):
+        if flags["negate"]:
+            return not expr
+        return expr
+
+    def case(self, s, flags):
+        if flags["case_sensitive"]:
+            return s
+        return s.lower()
 
     def resolve_query(self, params):
         total_score = {}
@@ -301,11 +316,21 @@ class MusicCollection():
                             break
                         query, flags = self.parse_flags(query_kw)
                         if flags["match_type"] == "exact":
-                            print(query.lower() , collection_kw.lower())
-                            if query.lower() != collection_kw.lower():
+                            if self.negate(self.case(query, flags) != self.case(collection_kw, flags), flags):
+                                valid = False
+                        elif flags["match_type"] == "range":
+                            splt = query.split('-')
+                            if len(splt) != 2:
+                                continue
+                            range_min = safe_to_int(splt[0])
+                            range_max = safe_to_int(splt[1])
+                            value = safe_to_int(collection_kw)
+                            if value is None:
+                                continue
+                            if self.negate(range_max is not None and value > range_max or range_min is not None and value < range_min, flags):
                                 valid = False
                         else:
-                            score += fuzzy_substring(query_kw.lower(), collection_kw.lower())
+                            score += fuzzy_substring(self.case(query_kw, flags), self.case(collection_kw, flags))
                             score += len(collection_kw)/100.0
                 if not valid:
                     break
@@ -455,7 +480,7 @@ class MusicServer():
 #    : case sensitive: 'album=:,Killers'
 #    no prefix means fuzzy match (modified Levenshtein distance). Use '|' for 'or'
 
-# sort: first by artist, then by release_date, then by album, then by track_number, finally by title.
+# sort: first by artist, then by release, then by album, then by track_number, finally by title.
     def play(self, params):
         if ("source" in params):
             source = params["source"][0]

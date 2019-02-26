@@ -34,7 +34,6 @@ async def handle(request):
 </form>
 
 <form action="http://192.168.0.100:5100/suresms" target="dummyframe">
-
   <input type="hidden" name="receivedutcdatetime" value="time" />
   <input type="hidden" name="receivedfromphonenumber" value="12345678" />
   <input type="hidden" name="receivedbyphonenumber" value="87654321" />
@@ -43,12 +42,19 @@ async def handle(request):
 </form>
 
 <form action="http://192.168.0.100:5100/suresms" target="dummyframe">
-
   <input type="hidden" name="receivedutcdatetime" value="time" />
   <input type="hidden" name="receivedfromphonenumber" value="12345678" />
   <input type="hidden" name="receivedbyphonenumber" value="87654321" />
   <input type="hidden" name="body" value="radio 24syv" />
   <button type="submit">24syv</button>
+</form>
+
+<form action="http://192.168.0.100:5100/suresms" target="dummyframe">
+  <input type="hidden" name="receivedutcdatetime" value="time" />
+  <input type="hidden" name="receivedfromphonenumber" value="12345678" />
+  <input type="hidden" name="receivedbyphonenumber" value="87654321" />
+  <input type="hidden" name="body" value="stop" />
+  <button type="submit">Stop</button>
 </form>
 
 """

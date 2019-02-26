@@ -169,7 +169,7 @@ class Comm():
         while not ok:
             try:
                 self.ip = self.get_ip()
-                self.multicast_listener = MulticastListener(lambda data: self.mc_received(data), self.logger, exc_cb)
+                self.multicast_listener = MulticastListener(self.mc_received, self.logger, exc_cb)
                 self.multicast_sender = MulticastSender(self.logger)
                 self.unicast_listener = UnicastListener(self.uc_received, self.port, self.logger, exc_cb)
                 self.unicast_sender = UnicastSender(self.logger)

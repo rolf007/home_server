@@ -334,9 +334,9 @@ class Id3Edit:
         artist = file["id3"].tag.artist
         title = file["id3"].tag.title
         genre = file["id3"].tag.genre
-        release_date = file["id3"].tag.release_date
+        release = file["id3"].tag.release_date
         version = file["id3"].tag.version
-        columns = [url, album, track_num, artist, title, genre, release_date, version]
+        columns = [url, album, track_num, artist, title, genre, release, version]
         return columns[x]
 
     def set_item(self, x, file, value):
