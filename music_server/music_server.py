@@ -329,6 +329,8 @@ class MusicCollection():
                                 continue
                             if self.negate(range_max is not None and value > range_max or range_min is not None and value < range_min, flags):
                                 valid = False
+                        elif flags["match_type"] == "regex":
+                            m = re.search(self.case(query, flags), self.case(collection_kw, flags))
                         else:
                             score += fuzzy_substring(self.case(query_kw, flags), self.case(collection_kw, flags))
                             score += len(collection_kw)/100.0

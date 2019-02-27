@@ -127,5 +127,23 @@ class TestMusicServer(unittest.TestCase):
         next_song = music_collection.resolve_query({"release": ["!-1981-1995"]})
         self.assertEqual(set(["/foo/iron maiden - prowler.mp3", "/foo/iron maiden - futureal.mp3"]), set(next_song))
 
+    def test_regex_match(self):
+        logger = Logger("music_server")
+        music_collection = MusicCollection(logger, {
+            "/foo/iron maiden - iron maiden.mp3":{ "artist": "Iron Maiden", "title": "Iron Maiden"},
+            "/foo/ramin djawadi - iron man theme.mp3":{ "artist": "Ramin Djawadi", "title": "Theme from Iron Man"},
+            "/foo/black sabbath - iron man.mp3":{ "artist": "Black Sabbath", "title": "Iron Man"},
+            "/foo/mark winholtz - ironman hymn.mp3":{ "artist": "Mark Winholtz", "title": "Ironman Hymn - Everything is Possible"},
+            })
+        next_song = music_collection.resolve_query({"title": ["/^iron ma"]})
+        self.assertEqual(set(["/foo/iron maiden - iron maiden.mp3", "/foo/black sabbath - iron man.mp3"]), set(next_song))
+        next_song = music_collection.resolve_query({"title": ["/^iron\s*ma"]})
+        self.assertEqual(set(["/foo/iron maiden - iron maiden.mp3", "/foo/black sabbath - iron man.mp3", "/foo/mark winholtz - ironman hymn.mp3"]), set(next_song))
+        next_song = music_collection.resolve_query({"title": [":/^Iron\s*Ma"]})
+        self.assertEqual(set(["/foo/iron maiden - iron maiden.mp3", "/foo/black sabbath - iron man.mp3"]), set(next_song))
+        next_song = music_collection.resolve_query({"title": ["!:/^Iron\s*Ma"]})
+        self.assertEqual(set(["/foo/ramin djawadi - iron man theme.mp3", "/foo/mark winholtz - ironman hymn.mp3"]), set(next_song))
+
+
 if __name__ == '__main__':
     unittest.main()
