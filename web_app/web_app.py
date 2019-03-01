@@ -60,10 +60,13 @@ $('#filter').keyup(function() {
     document.getElementById("fruits").innerHTML = "";
     var songs = JSON.parse(data);
     for (var key in songs) {
-      var node = document.createElement("LI");
+      var linode = document.createElement("LI");
+      var divnode = document.createElement("DIV");
       var textnode = document.createTextNode(songs[key]["artist"] + " - " + songs[key]["title"]);
-      node.appendChild(textnode);
-      document.getElementById("fruits").appendChild(node);
+      linode.appendChild(divnode);
+      divnode.appendChild(textnode);
+      divnode.setAttribute("title", key);
+      document.getElementById("fruits").appendChild(linode);
     }
   });
 
