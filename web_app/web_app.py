@@ -12,48 +12,87 @@ sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
 from micro_service import MicroServiceHandler
 
-async def handle(request):
-    text = """
-<!DOCTYPE html>
-<html>
-<head>
+minimal_head = """
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="apple-touch-icon" href='/assets/apple-touch-icon.png'/>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+"""
 
-</head>
-<body>
+def tag(tg, inner):
+    return "<"+tg+">\n"+inner+"</"+tg+">"
+def button(func, args, text):
+    return "<button onclick=\""+func+"("+args+")\">"+text+"</button><br>\n"
+def link(lnk, text):
+    return "<form action=\""+lnk+"\"><input type=\"submit\" value=\""+text+"\" /></form>\n"
 
-<!--<img src="/assets/apple-touch-icon.png"\>-->
 
-<button onclick="play_list('svensk')">Ulf Lundell & Bo Kasper</button><br>
-<script>
-function play_list(playlist_name) {
-  $.get("/play", {source:"list", query:playlist_name});
-}
-</script>
+class WebApp:
+    def __init__(self, logger, exc_cb):
+        self.logger = logger
+        self.comm = Comm(5009, "web_app", {}, self.logger, exc_cb)
 
-<button onclick="radio('p1')">P1</button><br>
-<button onclick="radio('p2')">P2</button><br>
-<button onclick="radio('p3')">P3</button><br>
-<button onclick="radio('24syv')">24syv</button><br>
-<script>
+        self.loop = asyncio.get_event_loop()
+
+        app = web.Application()
+        app.add_routes([web.get('/', self.main_menu),
+                        web.get('/stop', self.stop),
+                        web.get('/search', self.search),
+                        web.get('/play', self.play),
+                        web.get('/radio', self.radio),
+                        web.get('/music', self.music_menu),
+                        web.get('/assets/apple-touch-icon.png', self.png)])
+
+        handler = app.make_handler()
+        self.server = self.loop.create_server(handler, port=8080)
+        self.loop.run_until_complete(self.server)
+
+    async def png(self, request):
+        headers = {'content-type': 'image/png'}
+        return web.FileResponse('./web_app/assets/apple-touch-icon.png')
+
+    async def main_menu(self, request):
+        content = ""
+        content += link("/music", "Music")
+        content += button("radio", "'p1'", "P1")
+        content += button("radio", "'p2'", "P2")
+        content += button("radio", "'p3'", "P3")
+        content += button("radio", "'24syv'", "24Syv")
+        content += button("stop", "", "Stop")
+
+        scripts = """
 function radio(channel_name) {
   $.get("/radio", {channel:channel_name});
 }
-</script>
-
-<button onclick="stop()">Stop</button><br>
-<script>
 function stop() {
   $.get("/stop");
 }
-</script>
+"""
+        head = tag("head", minimal_head)
+        script = tag("script", scripts)
+        body = tag("body", content + script)
+        html = tag("html", head + body)
+        text = "<!DOCTYPE html>" + html
+        peername = request.transport.get_extra_info('peername')
+        print("peername:", peername)
+    
+        headers = {'content-type': 'text/html'}
+        return web.Response(headers=headers, text=text)
 
-<input name="title" id="filter" />
-<ol id="fruits"></ol>
-<script>
-var $fruits = $('#fruits li');
+    async def music_menu(self, request):
+        peername = request.transport.get_extra_info('peername')
+        content = ""
+        content += link("/", "Main Menu")
+        content += button("play_list", "'svensk'", "Ulf Lundell & Bo Kasper")
+        content += button("stop", "", "Stop")
+        content += "<input name=\"title\" id=\"filter\" />\n"
+        content += "<ol id=\"fruits\"></ol>\n"
+        scripts = """
+function play_list(playlist_name) {
+  $.get("/play", {source:"list", query:playlist_name});
+}
+function stop() {
+  $.get("/stop");
+}
 $('#filter').keyup(function() {
   var query = document.getElementById('filter').value
   $.get("/search", {title:query}, function(data, status){
@@ -69,41 +108,17 @@ $('#filter').keyup(function() {
       document.getElementById("fruits").appendChild(linode);
     }
   });
-
 });
-</script>
-</body>
-</html>
 """
-    peername = request.transport.get_extra_info('peername')
-    print(peername)
 
-    headers = {'content-type': 'text/html'}
-    return web.Response(headers=headers, text=text)
+        head = tag("head", minimal_head)
+        script = tag("script", scripts)
+        body = tag("body", content + script)
+        html = tag("html", head + body)
+        text = "<!DOCTYPE html>" + html
 
-
-async def png(request):
-    headers = {'content-type': 'image/png'}
-    return web.FileResponse('./web_app/assets/apple-touch-icon.png')
-
-class WebApp:
-    def __init__(self, logger, exc_cb):
-        self.logger = logger
-        self.comm = Comm(5009, "web_app", {}, self.logger, exc_cb)
-
-        self.loop = asyncio.get_event_loop()
-
-        app = web.Application()
-        app.add_routes([web.get('/', handle),
-                        web.get('/stop', self.stop),
-                        web.get('/search', self.search),
-                        web.get('/play', self.play),
-                        web.get('/radio', self.radio),
-                        web.get('/assets/apple-touch-icon.png', png)])
-
-        handler = app.make_handler()
-        self.server = self.loop.create_server(handler, port=8080)
-        self.loop.run_until_complete(self.server)
+        headers = {'content-type': 'text/html'}
+        return web.Response(headers=headers, text=text)
 
     async def stop(self, request):
         res = self.comm.call("music_server", "stop", {})
@@ -114,6 +129,7 @@ class WebApp:
         return web.Response(headers=headers, text=text)
 
     async def radio(self, request):
+        print("calling radio!")
         channel = request.rel_url.query['channel']
         res = self.comm.call("music_server", "stop", {})
         res = self.comm.call("stream_receiver", "radio", {"channel":[channel]})
