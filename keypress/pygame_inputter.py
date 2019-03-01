@@ -1,11 +1,18 @@
 import pygame
+import os
+import sys
 from keypress_runner import KeyPressRunner
+
+home_server_root = os.path.split(sys.path[0])[0]
+sys.path.append(os.path.join(home_server_root, "utils"))
+from timer import Timer
 
 class PyGameInputter():
     def __init__(self):
         self.runner = KeyPressRunner()
         pygame.display.init()
         pygame.display.set_mode((100,100))
+        self.timer = Timer(0.02, self.main_loop)
 
     def set_key_press(self, key_press):
         self.runner.set_key_press(key_press)
@@ -13,7 +20,7 @@ class PyGameInputter():
     def click_NAD_button(self, n):
         pass
 
-    def main_loop(self):
+    async def main_loop(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 raise KeyboardInterrupt

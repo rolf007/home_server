@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 
+import asyncio
+import os
+import sys
+import threading
 from aiohttp import web
+home_server_root = os.path.split(sys.path[0])[0]
+home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
+sys.path.append(os.path.join(home_server_root, "comm"))
+sys.path.append(os.path.join(home_server_root, "utils"))
+from comm import Comm
+from micro_service import MicroServiceHandler
 
 async def handle(request):
     text = """
@@ -14,76 +24,50 @@ async def handle(request):
 </head>
 <body>
 
-<iframe width="10" height="10" border="0" name="dummyframe" id="dummyframe"></iframe>
 <!--<img src="/assets/apple-touch-icon.png"\>-->
 
-<form action="http://192.168.0.100:5100/suresms" target="dummyframe">
-
-  <input type="hidden" name="receivedutcdatetime" value="time" />
-  <input type="hidden" name="receivedfromphonenumber" value="12345678" />
-  <input type="hidden" name="receivedbyphonenumber" value="87654321" />
-  <input type="hidden" name="body" value="pl svensk" />
-  <button type="submit">Ulf Lundell & Bo Kasper</button>
-</form>
-
-<form action="http://192.168.0.100:5100/suresms" target="dummyframe">
-
-  <input type="hidden" name="receivedutcdatetime" value="time" />
-  <input type="hidden" name="receivedfromphonenumber" value="12345678" />
-  <input type="hidden" name="receivedbyphonenumber" value="87654321" />
-  <input type="hidden" name="body" value="radio p1" />
-  <button type="submit">P1</button>
-</form>
-
-<form action="http://192.168.0.100:5100/suresms" target="dummyframe">
-
-  <input type="hidden" name="receivedutcdatetime" value="time" />
-  <input type="hidden" name="receivedfromphonenumber" value="12345678" />
-  <input type="hidden" name="receivedbyphonenumber" value="87654321" />
-  <input type="hidden" name="body" value="radio p2" />
-  <button type="submit">P2</button>
-</form>
-
-<form action="http://192.168.0.100:5100/suresms" target="dummyframe">
-  <input type="hidden" name="receivedutcdatetime" value="time" />
-  <input type="hidden" name="receivedfromphonenumber" value="12345678" />
-  <input type="hidden" name="receivedbyphonenumber" value="87654321" />
-  <input type="hidden" name="body" value="radio p3" />
-  <button type="submit">P3</button>
-</form>
-
-<form action="http://192.168.0.100:5100/suresms" target="dummyframe">
-  <input type="hidden" name="receivedutcdatetime" value="time" />
-  <input type="hidden" name="receivedfromphonenumber" value="12345678" />
-  <input type="hidden" name="receivedbyphonenumber" value="87654321" />
-  <input type="hidden" name="body" value="radio 24syv" />
-  <button type="submit">24syv</button>
-</form>
-
-<form action="http://192.168.0.100:5100/suresms" target="dummyframe">
-  <input type="hidden" name="receivedutcdatetime" value="time" />
-  <input type="hidden" name="receivedfromphonenumber" value="12345678" />
-  <input type="hidden" name="receivedbyphonenumber" value="87654321" />
-  <input type="hidden" name="body" value="stop" />
-  <button type="submit">Stop</button>
-</form>
-
-<button onclick="myFunction()">Test1 (led)</button>
-<button onclick="myFunction2()">Test1 (png)</button>
-
+<button onclick="play_list('svensk')">Ulf Lundell & Bo Kasper</button><br>
 <script>
-function myFunction() {
-  $.get("http://127.0.0.1:5008/set", {anim:"boot"}, function(data, status){
-    alert("Data: foo" + status);
-  });
+function play_list(playlist_name) {
+  $.get("/play", {source:"list", query:playlist_name});
 }
 </script>
+
+<button onclick="radio('p1')">P1</button><br>
+<button onclick="radio('p2')">P2</button><br>
+<button onclick="radio('p3')">P3</button><br>
+<button onclick="radio('24syv')">24syv</button><br>
 <script>
-function myFunction2() {
-  $.get("assets/apple-touch-icon.png", function(data, status){
-    alert("Data: foo" + status);
-  });
+function radio(channel_name) {
+  $.get("/radio", {channel:channel_name});
 }
+</script>
+
+<button onclick="stop()">Stop</button><br>
+<script>
+function stop() {
+  $.get("/stop");
+}
+</script>
+
+<input name="title" id="filter" />
+<ol id="fruits"></ol>
+<script>
+var $fruits = $('#fruits li');
+$('#filter').keyup(function() {
+  var query = document.getElementById('filter').value
+  $.get("/search", {title:query}, function(data, status){
+    document.getElementById("fruits").innerHTML = "";
+    var songs = JSON.parse(data);
+    for (var key in songs) {
+      var node = document.createElement("LI");
+      var textnode = document.createTextNode(songs[key]["title"]);
+      node.appendChild(textnode);
+      document.getElementById("fruits").appendChild(node);
+    }
+  });
+
+});
 </script>
 </body>
 </html>
@@ -94,14 +78,71 @@ function myFunction2() {
     headers = {'content-type': 'text/html'}
     return web.Response(headers=headers, text=text)
 
+
 async def png(request):
     headers = {'content-type': 'image/png'}
     return web.FileResponse('./web_app/assets/apple-touch-icon.png')
 
-app = web.Application()
-app.add_routes([web.get('/', handle),
-                web.get('/{name}', handle),
-                web.get('/assets/apple-touch-icon.png', png)])
+class WebApp:
+    def __init__(self, logger, exc_cb):
+        self.logger = logger
+        self.comm = Comm(5009, "web_app", {}, self.logger, exc_cb)
 
-web.run_app(app)
+        self.loop = asyncio.get_event_loop()
 
+        app = web.Application()
+        app.add_routes([web.get('/', handle),
+                        web.get('/stop', self.stop),
+                        web.get('/search', self.search),
+                        web.get('/play', self.play),
+                        web.get('/radio', self.radio),
+                        web.get('/assets/apple-touch-icon.png', png)])
+
+        handler = app.make_handler()
+        self.server = self.loop.create_server(handler, port=8080)
+        self.loop.run_until_complete(self.server)
+
+    async def stop(self, request):
+        res = self.comm.call("music_server", "stop", {})
+        res = self.comm.call("stream_receiver", "off", {})
+        res = self.comm.call("led", "set", {"anim": ["off"]})
+        text=res[1]
+        headers = {'content-type': 'text/html'}
+        return web.Response(headers=headers, text=text)
+
+    async def radio(self, request):
+        channel = request.rel_url.query['channel']
+        res = self.comm.call("music_server", "stop", {})
+        res = self.comm.call("stream_receiver", "radio", {"channel":[channel]})
+        res = self.comm.call("led", "set", {"anim": ["tu"]})
+        text=res[1]
+        headers = {'content-type': 'text/html'}
+        return web.Response(headers=headers, text=text)
+
+    async def play(self, request):
+        source = request.rel_url.query['source']
+        if source == 'list':
+            query = request.rel_url.query['query']
+            res = self.comm.call("music_server", "play", {"source":[source], "query":[query]})
+            res = self.comm.call("stream_receiver", "multicast", {})
+            res = self.comm.call("led", "set", {"anim": ["mp"]})
+            text=res[1]
+        else:
+            text = "source error"
+        headers = {'content-type': 'text/html'}
+        return web.Response(headers=headers, text=text)
+
+    async def search(self, request):
+        title = request.rel_url.query['title']
+        res = self.comm.call("music_server", "search", {"title":[title]})
+        text=res[1]
+        headers = {'content-type': 'text/html'}
+        return web.Response(headers=headers, text=text)
+
+    def shut_down(self):
+        print("begin stopping")
+        self.comm.shut_down()
+        print("done stopping")
+
+if __name__ == '__main__':
+    MicroServiceHandler("web_app", WebApp)

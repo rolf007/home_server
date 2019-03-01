@@ -1,99 +1,76 @@
+import asyncio
 import json
 import random
+import requests
 import socket
 import struct
 import sys
 import threading
 import time
 import urllib.parse
+from aiohttp import web
 
 class UnicastListener():
     def __init__(self, cb, port, logger, exc_cb):
         self.cb = cb
         self.exc_cb = exc_cb
-        self.logger = logger
-        self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        #Prepare a sever socket
-        self.serverSocket.bind(('', port))
-        self.serverSocket.listen(1)
-        self.serverSocket.settimeout(2.0)
-        self.running = True
 
-        self.thread = threading.Thread(target=self.run, args=())
-        #self.thread.daemon = True
-        self.thread.start()
-
-    def run(self):
-        while self.running:
-            try:
-                #Establish the connection
-                connectionSocket, addr = self.serverSocket.accept()
-                message = connectionSocket.recv(1024)
-                message = message.decode('utf-8', 'ignore')
-                ret = (404, "Not found")
-                a = message.find('/')
-                if a != -1:
-                    b = message.find(' ', a)
-                    if b != -1:
-                        data = message[a+1:b]
-                        self.logger.log("comm listener received %s" % data)
-                        path  = urllib.parse.urlsplit(data).path
-                        query = urllib.parse.urlsplit(data).query
-                        params = urllib.parse.parse_qs(query)
-                        ret = self.cb(path, params, addr[0], addr[1])
-                #Send one HTTP header line into socket
-                if ret[0] == 200:
-                    errorMsg = "OK"
-                elif ret[0] == 404:
-                    errorMsg = "Not Found"
-                else:
-                    errorMsg = "Other error"
-                self.logger.log("comm listener replying %s" % ret[1])
-                connectionSocket.send(bytes('HTTP/1.0 %d %s\r\n\r\n' % (ret[0], errorMsg), 'ascii') + ret[1].encode('utf-8', 'ignore'))
-                #connectionSocket.send('404 Not Found')
-                connectionSocket.close()
-            except socket.timeout:
-                pass
-            except:
-                self.exc_cb(sys.exc_info())
-        self.logger.log("closing serverSocket")
-        self.serverSocket.close()
+        self.loop = asyncio.get_event_loop()
+        self.app1 = web.Application()
+        self.app1.router.add_route('GET', '/{tail:.*}', self.handle)
+        self.handler1 = self.app1.make_handler()
+        coroutine1 = self.loop.create_server(self.handler1, '0.0.0.0', port)
+        self.server1 = self.loop.run_until_complete(coroutine1)
 
     def stop(self):
-        self.running = False
-        self.thread.join()
+        self.loop.run_until_complete(self.app1.shutdown())
+        self.loop.run_until_complete(self.handler1.shutdown(60.0))
+        #self.loop.run_until_complete(self.handler1.finish_connections(1.0))
+        self.loop.run_until_complete(self.app1.cleanup())
+
+    async def handle(self, request):
+        try:
+            peername = request.transport.get_extra_info('peername')
+            if peername is None:
+                ip, port = '0.0.0.0', 0
+            else:
+                ip, port = peername
+            headers = {'content-type': 'text/json'}
+            d = request.rel_url.query
+            # Convert MultiDict 'd' to dict of lists 'e':
+            e = {}
+            for kv in d.items():
+                if kv[0] not in e:
+                    e[kv[0]] = []
+                e[kv[0]].append(kv[1])
+            ret = self.cb(request.path[1:], e, ip, port)
+            return web.Response(headers=headers, text=ret[1], status=ret[0])
+        except Exception as e:
+            await self.exc_cb(sys.exc_info())
+            return web.Response(headers=headers, text="causgt exception", status=500)
 
 class UnicastSender():
     def __init__(self, logger):
         self.logger = logger
 
-    def send(self, ip, port, function, args):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def args_to_html(self, args):
+        if len(args) == 0:
+            return ""
+        ret = ""
+        for k, v in args.items():
+            for a in v:
+                if len(ret):
+                    ret += "&"
+                ret += k + "=" + a
+        return "?" + ret
 
-        try:
-            s.connect((ip, port))
-            req = "%s?%s" % (function, urllib.parse.urlencode(args, doseq=True))
-            self.logger.log("sender sending %s" % req)
-            s.sendall(bytes("GET /%s HTTP/1.1\r\nHost: %s\r\n\r\n" % (req, ip), 'ascii'))
-            ret_code = 500
-            ret = "undefined"
-            r = s.recv(4096).decode('utf-8', 'ignore')
-            self.logger.log("sender received = %s" % r)
-            a = r.find(' ')
-            if a != -1:
-                b = r.find(' ', a+1)
-                if b != -1:
-                    ret_code = int(r[a+1:b])
-                    c = r.find('\r\n\r\n', b)
-                    if c != -1:
-                        ret = r[c+4:]
-            s.close()
-            self.logger.log("sender received %s" % ret)
-            return (ret_code, ret)
-        except ConnectionRefusedError:
-            self.logger.log("Error: Can't send. Connection refused!")
-            return (521, "Connection refused!")
+    def send(self, ip, port, function, args):
+        req = "http://%s:%s/%s%s" % (ip, port, function, self.args_to_html(args))
+        resp0 = requests.get(req)
+        if resp0.ok:
+            return (200, resp0.text)
+        else:
+            return (405, resp0.text)
 
 class MulticastListener():
     def __init__(self, cb, logger, exc_cb):

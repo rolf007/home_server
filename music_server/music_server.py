@@ -7,7 +7,6 @@
 #pip install --user youtube_dl
 #pip install --user -U youtube-dl
 
-
 import subprocess
 import os
 import sys
@@ -30,12 +29,6 @@ from comm import Comm
 from mkdirp import mkdirp
 from fuzzy_substring import fuzzy_substring
 from micro_service import MicroServiceHandler
-
-def safe_to_int(s):
-    try:
-        return int(s)
-    except:
-        return None
 
 class VlcThread():
     def __init__(self, logger):
@@ -275,12 +268,18 @@ class MusicCollection():
 
     def parse_flags(self, query):
         flags = {"case_sensitive": False, "negate": False, "match_type": "fuzzy"}
+        if len(query) == 0:
+            return query, flags
         if query[0] == '!':
             flags["negate"] = True
             query = query[1:]
+        if len(query) == 0:
+            return query, flags
         if query[0] == ':':
             flags["case_sensitive"] = True
             query = query[1:]
+        if len(query) == 0:
+            return query, flags
         if query[0] == ',':
             flags["match_type"] = "exact"
             query = query[1:]
@@ -302,7 +301,14 @@ class MusicCollection():
             return s
         return s.lower()
 
-    def resolve_query(self, params):
+    def safe_to_int(self, s):
+        try:
+            return int(s)
+        except:
+            return None
+
+
+    def resolve_query(self, params, urls_only):
         total_score = {}
         for url, music in self.music_collection.items():
             valid = True
@@ -322,15 +328,20 @@ class MusicCollection():
                             splt = query.split('-')
                             if len(splt) != 2:
                                 continue
-                            range_min = safe_to_int(splt[0])
-                            range_max = safe_to_int(splt[1])
-                            value = safe_to_int(collection_kw)
+                            range_min = self.safe_to_int(splt[0])
+                            range_max = self.safe_to_int(splt[1])
+                            value = self.safe_to_int(collection_kw)
                             if value is None:
                                 continue
                             if self.negate(range_max is not None and value > range_max or range_min is not None and value < range_min, flags):
                                 valid = False
                         elif flags["match_type"] == "regex":
-                            m = re.search(self.case(query, flags), self.case(collection_kw, flags))
+                            try:
+                                m = re.search(self.case(query, flags), self.case(collection_kw, flags))
+                                if self.negate(not m, flags):
+                                    valid = False
+                            except re.error:
+                                valid = False
                         else:
                             score += fuzzy_substring(self.case(query_kw, flags), self.case(collection_kw, flags))
                             score += len(collection_kw)/100.0
@@ -343,7 +354,10 @@ class MusicCollection():
             return []
         a_min = min(total_score, key=total_score.get)
         best_score = total_score[a_min]
-        play = [url for url, score in total_score.items() if score == best_score]
+        if urls_only:
+            play = [url for url, score in total_score.items() if score == best_score]
+        else:
+            play = {url:self.music_collection[url] for url, score in total_score.items() if score == best_score}
         return play
 
     def getPrettyName(self, url):
@@ -370,7 +384,7 @@ class MusicServer():
         self.playlists = load_playlists(self.logger)
         self.vlc_thread = VlcThread(self.logger)
         self.podcaster = Podcaster()
-        self.comm = Comm(5001, "music_server", {"play": self.play, "podcast": self.podcast, "skip": self.skip, "stop": self.stop, "tag": self.tag}, self.logger, exc_cb)
+        self.comm = Comm(5001, "music_server", {"play": self.play, "search": self.search, "podcast": self.podcast, "skip": self.skip, "stop": self.stop, "tag": self.tag}, self.logger, exc_cb)
         self.mode = "stopped"
 
 
@@ -483,6 +497,16 @@ class MusicServer():
 #    no prefix means fuzzy match (modified Levenshtein distance). Use '|' for 'or'
 
 # sort: first by artist, then by release, then by album, then by track_number, finally by title.
+    def search(self, params):
+        if ("source" in params):
+            source = params["source"][0]
+        else:
+            source = "collection"
+        if source == "collection":
+            results = self.music_collection.resolve_query(params, False)
+            return (200, "%s" % json.dumps(results))
+        return (404, "Source must be 'collection', 'youtube' or 'list' (%s)" % source)
+
     def play(self, params):
         if ("source" in params):
             source = params["source"][0]
@@ -494,10 +518,12 @@ class MusicServer():
             return self.play_youtube(params)
         elif source == "list":
             return self.play_list(params)
-        return (404, "Source must be 'collection', 'youtube' or 'list'")
+        return (404, "Source must be 'collection', 'youtube' or 'list' (%s)" % source)
 
     def play_collection(self, params):
-        filenames = self.music_collection.resolve_query(params)
+        filenames = self.music_collection.resolve_query(params, True)
+        if len(filenames) == 0:
+            return (404, "no matches")
         self.vlc_thread.enqueue(filenames, 'c')
         self.mode = "music"
         if len(filenames) == 1:
@@ -527,7 +553,7 @@ class MusicServer():
         sort = None if "sort" not in playlist else playlist["sort"]
         filenames = []
         for q in qs:
-            filenames += self.music_collection.resolve_query(q)
+            filenames += self.music_collection.resolve_query(q, True)
         if sort == "shuffle":
             random.shuffle(filenames)
         self.vlc_thread.enqueue(filenames, 'c')

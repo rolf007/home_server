@@ -1,9 +1,14 @@
-from keypress_runner import KeyPressRunner
+import os
 import time
 import pygame
 import sys
+from keypress_runner import KeyPressRunner
 
 import RPi.GPIO as gpio
+
+home_server_root = os.path.split(sys.path[0])[0]
+sys.path.append(os.path.join(home_server_root, "utils"))
+from timer import Timer
 
 DIO = 23 # blue
 LATCH = 17 # white
@@ -25,6 +30,7 @@ class RaspberryInputter():
         gpio.output(LATCH,0)
         gpio.output(CLK,0)
         self.old_butts = (0,0,0,0,0,0,0,0)
+        self.timer = Timer(0.02, self.main_loop)
 
     def send_bit(b):
         time.sleep(0.01)
@@ -102,8 +108,7 @@ class RaspberryInputter():
         print("clicking '%s'" % n)
 
 
-    def main_loop(self):
-        time.sleep(0.02)
+    async def main_loop(self):
         butts = self.pop_NAD_button()
         if butts != self.old_butts:
             if butts[0] and not self.old_butts[0]: self.runner.key_input('A', True)

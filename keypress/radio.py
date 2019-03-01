@@ -186,9 +186,6 @@ class Radio():
         res = self.comm.call("stream_receiver", "multicast", {})
         res = self.comm.call("led", "set", {"anim": ["mp"]})
 
-    def main_loop(self):
-        self.inputter.main_loop()
-
     def shut_down(self):
         if self.startup_timer != None:
             self.startup_timer.cancel()

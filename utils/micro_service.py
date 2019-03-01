@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import traceback
@@ -11,27 +12,23 @@ from logger import Logger
 
 class MicroServiceHandler():
     def __init__(self, name, T, *args):
-        logger = Logger(name)
-        logger.log(">>> started %s" % T.__name__)
-        t = None
-        self.exc_info = None
-        def exc_cb(ei):
-            self.exc_info = ei
+        loop = asyncio.get_event_loop()
+        self.logger = Logger(name)
+        self.logger.log(">>> started %s" % T.__name__)
         try:
-            t = T(logger, exc_cb, *args)
-            while self.exc_info is None:
-                if hasattr(T, "main_loop"):
-                    t.main_loop()
-                else:
-                    time.sleep(2.0)
-            new_exc = Exception("Error: Thread threw an exception: %s" % self.exc_info[1])
-            raise new_exc.with_traceback(self.exc_info[2])
-        except KeyboardInterrupt:
-            logger.log("Received Ctrl-C")
-        except:
+            t = T(self.logger, self.exc_cb, *args)
+            try:
+                loop.run_forever()
+            except KeyboardInterrupt:
+                self.logger.log("Received Ctrl-C")
+            finally:
+                t.shut_down()
+        except Exception as e:
             for line in traceback.format_exc().split('\n'):
-                logger.log(line)
-        if t is not None:
-            t.shut_down()
-        logger.log("<<< ended %s" % T.__name__)
+                self.logger.log(line)
+        self.logger.log("<<< ended %s" % T.__name__)
 
+    async def exc_cb(self, ei):
+        for line in traceback.format_exc().split('\n'):
+            self.logger.log(line)
+        exit(1)

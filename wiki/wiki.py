@@ -17,9 +17,6 @@ class Wiki():
         self.logger = logger
         self.comm = Comm(5006, "wiki", {"wiki": self.wiki}, self.logger, exc_cb)
 
-    def main_loop(self):
-        print("wiki main loop")
-
     def wiki(self, params):
         query = params["query"][0]
         resp0 = requests.get("https://en.wikipedia.org/w/api.php?action=opensearch&limit=1&namespace=0&format=json&search=%s" % query)
