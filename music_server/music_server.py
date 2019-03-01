@@ -354,11 +354,13 @@ class MusicCollection():
             return []
         a_min = min(total_score, key=total_score.get)
         best_score = total_score[a_min]
+        urls = [url for url, score in total_score.items() if score == best_score]
+        limit = 20
+        if len(urls) > limit:
+            urls = urls[:limit]
         if urls_only:
-            play = [url for url, score in total_score.items() if score == best_score]
-        else:
-            play = {url:self.music_collection[url] for url, score in total_score.items() if score == best_score}
-        return play
+            return urls
+        return {url:self.music_collection[url] for url in urls}
 
     def getPrettyName(self, url):
         if url in self.music_collection:

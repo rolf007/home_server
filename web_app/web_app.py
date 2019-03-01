@@ -61,7 +61,7 @@ $('#filter').keyup(function() {
     var songs = JSON.parse(data);
     for (var key in songs) {
       var node = document.createElement("LI");
-      var textnode = document.createTextNode(songs[key]["title"]);
+      var textnode = document.createTextNode(songs[key]["artist"] + " - " + songs[key]["title"]);
       node.appendChild(textnode);
       document.getElementById("fruits").appendChild(node);
     }
