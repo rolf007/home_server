@@ -81,10 +81,15 @@ function stop() {
     async def music_menu(self, request):
         peername = request.transport.get_extra_info('peername')
         content = ""
+        if peername[0] == '192.168.0.11':
+            content += "<h2>Welcome rolf</h2><br>"
+        elif peername[0] == '192.168.0.13':
+            content += "<h2>Velkommen Karen</h2><br>"
         content += link("/", "Main Menu")
         content += button("play_list", "'svensk'", "Ulf Lundell & Bo Kasper")
         content += button("stop", "", "Stop")
         content += "<input name=\"title\" id=\"filter\" />\n"
+        content += button("play", "", "Play")
         content += "<ol id=\"fruits\"></ol>\n"
         scripts = """
 function play_list(playlist_name) {
@@ -92,6 +97,10 @@ function play_list(playlist_name) {
 }
 function stop() {
   $.get("/stop");
+}
+function play() {
+  var title = document.getElementById('filter').value
+  $.get("/play", {source:"collection", title:title});
 }
 $('#filter').keyup(function() {
   var query = document.getElementById('filter').value
@@ -143,6 +152,12 @@ $('#filter').keyup(function() {
         if source == 'list':
             query = request.rel_url.query['query']
             res = self.comm.call("music_server", "play", {"source":[source], "query":[query]})
+            res = self.comm.call("stream_receiver", "multicast", {})
+            res = self.comm.call("led", "set", {"anim": ["mp"]})
+            text=res[1]
+        elif source == 'collection':
+            title = request.rel_url.query['title']
+            res = self.comm.call("music_server", "play", {"source":[source], "title":[title]})
             res = self.comm.call("stream_receiver", "multicast", {})
             res = self.comm.call("led", "set", {"anim": ["mp"]})
             text=res[1]
