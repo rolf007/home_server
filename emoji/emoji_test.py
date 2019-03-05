@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 
 from emoji import EmojiParser
-import os
-import sys
-import time
 import unittest
 
 class TestEmoji(unittest.TestCase):

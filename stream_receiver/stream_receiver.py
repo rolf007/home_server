@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 import os
-import signal
 import sys
 import subprocess
-import time
 
 home_server_root = os.path.split(sys.path[0])[0]
 sys.path.append(os.path.join(home_server_root, "comm"))
@@ -122,4 +120,4 @@ class RadioReceiver():
         self.p = None
 
 if __name__ == '__main__':
-    MicroServiceHandler("streamer", StreamReceiver)
+    MicroServiceHandler("stream_receiver", StreamReceiver)

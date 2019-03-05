@@ -2,7 +2,6 @@
 
 from argpkarse import ArgpKarse
 import unittest
-import time
 
 class TestArgpKarse(unittest.TestCase):
 

@@ -7,7 +7,6 @@ import struct
 import sys
 import threading
 import time
-import urllib.parse
 from aiohttp import web
 
 class UnicastListener():
@@ -47,7 +46,7 @@ class UnicastListener():
             return web.Response(headers=headers, text=ret[1], status=ret[0])
         except Exception as e:
             await self.exc_cb(sys.exc_info())
-            return web.Response(headers=headers, text="causgt exception", status=500)
+            return web.Response(headers=headers, text="caugt exception", status=500)
 
 class UnicastSender():
     def __init__(self, logger):

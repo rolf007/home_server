@@ -3,14 +3,13 @@
 import unicodedata
 import os
 import sys
-import time
 
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
 sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
-from fuzzy_substring import fuzzy_substring
+from fuzzy_substring import Levenshtein
 from micro_service import MicroServiceHandler
 
 #import unicodedata
@@ -52,6 +51,7 @@ class EmojiParser():
         return ret
 
     def parse(self, i, text):
+        levenshtein = Levenshtein(1, 10, 10)
         h = i
         while i < len(text) and text[i] != ',':
             i = i + 1
@@ -60,16 +60,14 @@ class EmojiParser():
             return i+1, self.shortcuts[query]
         best_match = "?"
         best_score = -1
-        best_len = -1
         for block in self.blocks:
             for u in range(block[0], block[1]):
                 try:
                     name = unicodedata.name(chr(u))
-                    score = fuzzy_substring(query.lower(), name.lower())
-                    if score < best_score or best_score == -1 or (score == best_score and len(name) < best_len):
+                    score = levenshtein.distance(query.lower(), name.lower())
+                    if score < best_score or best_score == -1:
                         best_score = score
                         best_match = chr(u)
-                        best_len = len(name)
                 except:
                     pass
         self.logger(unicodedata.name(best_match))

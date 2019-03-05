@@ -3,7 +3,6 @@
 import asyncio
 import os
 import sys
-import threading
 from aiohttp import web
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
@@ -81,12 +80,13 @@ function stop() {
     async def music_menu(self, request):
         peername = request.transport.get_extra_info('peername')
         content = ""
+        content += link("/", "Main Menu")
         if peername[0] == '192.168.0.11':
             content += "<h2>Welcome rolf</h2><br>"
+            content += button("play_list", "'metal'", "Rolf")
         elif peername[0] == '192.168.0.13':
             content += "<h2>Velkommen Karen</h2><br>"
-        content += link("/", "Main Menu")
-        content += button("play_list", "'svensk'", "Ulf Lundell & Bo Kasper")
+            content += button("play_list", "'svensk'", "Ulf Lundell & Bo Kasper")
         content += button("stop", "", "Stop")
         content += "<input name=\"title\" id=\"filter\" />\n"
         content += button("play", "", "Play")

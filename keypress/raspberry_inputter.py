@@ -1,6 +1,5 @@
 import os
 import time
-import pygame
 import sys
 from keypress_runner import KeyPressRunner
 

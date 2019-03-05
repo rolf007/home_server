@@ -4,7 +4,6 @@ import os
 import sys
 import youtube_dl_wrapper
 import eyed3
-import locale
 
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])

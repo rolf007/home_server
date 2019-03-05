@@ -14,7 +14,6 @@ import json
 import os
 import requests
 import sys
-import time
 import urllib
 import re
 

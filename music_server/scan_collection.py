@@ -3,8 +3,6 @@
 import argparse
 import eyed3
 import json
-from os import listdir
-from os.path import isfile, join
 import os
 import subprocess
 import sys

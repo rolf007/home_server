@@ -3,18 +3,14 @@
 #https://wiki.videolan.org/Documentation:Streaming_HowTo/Advanced_Streaming_Using_the_Command_Line/#Examples
 #/etc/portage/package.use/vlc:
 #media-video/vlc lua
-#pip install --user eyed3
 #pip install --user youtube_dl
 #pip install --user -U youtube-dl
 
 import subprocess
 import os
 import sys
-import eyed3
 import fcntl
 import json
-import time
-from os import listdir
 from os.path import isfile, join
 import pty
 import random
@@ -27,7 +23,7 @@ sys.path.append(os.path.join(home_server_root, "comm"))
 sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
 from mkdirp import mkdirp
-from fuzzy_substring import fuzzy_substring
+from fuzzy_substring import Levenshtein
 from micro_service import MicroServiceHandler
 
 class VlcThread():
@@ -308,7 +304,8 @@ class MusicCollection():
             return None
 
 
-    def resolve_query(self, params, urls_only):
+    def resolve_query(self, params):
+        levenshtein = Levenshtein(1, 10, 10)
         total_score = {}
         for url, music in self.music_collection.items():
             valid = True
@@ -343,8 +340,7 @@ class MusicCollection():
                             except re.error:
                                 valid = False
                         else:
-                            score += fuzzy_substring(self.case(query_kw, flags), self.case(collection_kw, flags))
-                            score += len(collection_kw)/100.0
+                            score += levenshtein.distance(self.case(query_kw, flags), self.case(collection_kw, flags))
                 if not valid:
                     break
             if valid:
@@ -358,8 +354,9 @@ class MusicCollection():
         limit = 20
         if len(urls) > limit:
             urls = urls[:limit]
-        if urls_only:
-            return urls
+        return urls
+
+    def get_all_info(self, urls):
         return {url:self.music_collection[url] for url in urls}
 
     def getPrettyName(self, url):
@@ -505,7 +502,8 @@ class MusicServer():
         else:
             source = "collection"
         if source == "collection":
-            results = self.music_collection.resolve_query(params, False)
+            urls = self.music_collection.resolve_query(params)
+            results = self.music_collection.get_all_info(urls)
             return (200, "%s" % json.dumps(results))
         return (404, "Source must be 'collection', 'youtube' or 'list' (%s)" % source)
 
@@ -523,7 +521,7 @@ class MusicServer():
         return (404, "Source must be 'collection', 'youtube' or 'list' (%s)" % source)
 
     def play_collection(self, params):
-        filenames = self.music_collection.resolve_query(params, True)
+        filenames = self.music_collection.resolve_query(params)
         if len(filenames) == 0:
             return (404, "no matches")
         self.vlc_thread.enqueue(filenames, 'c')
@@ -555,7 +553,7 @@ class MusicServer():
         sort = None if "sort" not in playlist else playlist["sort"]
         filenames = []
         for q in qs:
-            filenames += self.music_collection.resolve_query(q, True)
+            filenames += self.music_collection.resolve_query(q)
         if sort == "shuffle":
             random.shuffle(filenames)
         self.vlc_thread.enqueue(filenames, 'c')

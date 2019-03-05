@@ -3,7 +3,6 @@ import sys
 from keypress import KeyPress
 from pygame_inputter import PyGameInputter
 from morse_maker import MorseMaker
-from b_inputter import BInputter
 
 #seq0 = KeyPress.compile("Aa1000-3000*Aa<foo>", foo=lambda: print("SUCCES foo"))
 #seq1 = KeyPress.compile("Bb1000-3000*Bb<bar>", bar=lambda: print("SUCCES bar"))

@@ -3,7 +3,6 @@
 import os
 import json
 import sys
-import re
 import requests
 
 home_server_root = os.path.split(sys.path[0])[0]

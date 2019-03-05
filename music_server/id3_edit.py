@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
+#pip install --user eyed3
 import argparse
-from copy import deepcopy
 import curses
 from enum import Enum
 import eyed3

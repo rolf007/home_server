@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 import threading
-from time import strftime, localtime, sleep
+from time import localtime
 import time
 
 home_server_root = os.path.split(sys.path[0])[0]

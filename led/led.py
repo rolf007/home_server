@@ -3,7 +3,6 @@
 import os
 import sys
 import threading
-import time
 
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
@@ -112,6 +111,13 @@ class LedController():
         self.num_layers = 3
         self.leds = [[self.Led() for i in range(self.num_layers)] for i in range(self.num_leds)]
         self.meta_led = self.Led()
+        self.color = {"user_k": (0,255,0,0,255),
+                      "user_r": (0,100,255,0,255),
+                      "user_c": (0,255,255,0,255),
+                      "user_h": (0,100,0,100,255),
+                      "user_a": (0,0,0,140,255),
+                      "user_s": (0,20,160,255,255)
+                      }
 
 
         if self.host_mode:
@@ -250,14 +256,68 @@ class LedController():
             self.leds[6][1].set_anim([("set",(0,0,0,0,255))])
             self.leds[7][1].set_anim([("set",(0,0,0,0,255))])
         elif anim == "playlist_menu":
-            self.leds[0][1].set_anim([("set",(0,255,0,0,255))])
-            self.leds[1][1].set_anim([("set",(0,100,255,0,255))])
-            self.leds[2][1].set_anim([("set",(0,255,255,0,255))])
-            self.leds[3][1].set_anim([("set",(0,100,0,100,255))])
-            self.leds[4][1].set_anim([("set",(0,0,0,140,255))])
-            self.leds[5][1].set_anim([("set",(0,20,160,255,255))])
+            self.leds[0][1].set_anim([("set",self.color["user_k"])])
+            self.leds[1][1].set_anim([("set",self.color["user_r"])])
+            self.leds[2][1].set_anim([("set",self.color["user_c"])])
+            self.leds[3][1].set_anim([("set",self.color["user_h"])])
+            self.leds[4][1].set_anim([("set",self.color["user_a"])])
+            self.leds[5][1].set_anim([("set",self.color["user_s"])])
             self.leds[6][1].set_anim([("set",(0,0,0,0,255))])
             self.leds[7][1].set_anim([("set",(0,0,0,0,255))])
+        elif anim == "user_k_menu":
+            self.leds[0][1].set_anim([("set",self.color["user_k"])])
+            self.leds[1][1].set_anim([("set",self.color["user_k"])])
+            self.leds[2][1].set_anim([("set",self.color["user_k"])])
+            self.leds[3][1].set_anim([("set",self.color["user_k"])])
+            self.leds[4][1].set_anim([("set",self.color["user_k"])])
+            self.leds[5][1].set_anim([("set",self.color["user_k"])])
+            self.leds[6][1].set_anim([("set",self.color["user_k"])])
+            self.leds[7][1].set_anim([("set",self.color["user_k"])])
+        elif anim == "user_r_menu":
+            self.leds[0][1].set_anim([("set",self.color["user_r"])])
+            self.leds[1][1].set_anim([("set",self.color["user_r"])])
+            self.leds[2][1].set_anim([("set",self.color["user_r"])])
+            self.leds[3][1].set_anim([("set",self.color["user_r"])])
+            self.leds[4][1].set_anim([("set",self.color["user_r"])])
+            self.leds[5][1].set_anim([("set",self.color["user_r"])])
+            self.leds[6][1].set_anim([("set",self.color["user_r"])])
+            self.leds[7][1].set_anim([("set",self.color["user_r"])])
+        elif anim == "user_c_menu":
+            self.leds[0][1].set_anim([("set",self.color["user_c"])])
+            self.leds[1][1].set_anim([("set",self.color["user_c"])])
+            self.leds[2][1].set_anim([("set",self.color["user_c"])])
+            self.leds[3][1].set_anim([("set",self.color["user_c"])])
+            self.leds[4][1].set_anim([("set",self.color["user_c"])])
+            self.leds[5][1].set_anim([("set",self.color["user_c"])])
+            self.leds[6][1].set_anim([("set",self.color["user_c"])])
+            self.leds[7][1].set_anim([("set",self.color["user_c"])])
+        elif anim == "user_h_menu":
+            self.leds[0][1].set_anim([("set",self.color["user_h"])])
+            self.leds[1][1].set_anim([("set",self.color["user_h"])])
+            self.leds[2][1].set_anim([("set",self.color["user_h"])])
+            self.leds[3][1].set_anim([("set",self.color["user_h"])])
+            self.leds[4][1].set_anim([("set",self.color["user_h"])])
+            self.leds[5][1].set_anim([("set",self.color["user_h"])])
+            self.leds[6][1].set_anim([("set",self.color["user_h"])])
+            self.leds[7][1].set_anim([("set",self.color["user_h"])])
+        elif anim == "user_a_menu":
+            self.leds[0][1].set_anim([("set",self.color["user_a"])])
+            self.leds[1][1].set_anim([("set",self.color["user_a"])])
+            self.leds[2][1].set_anim([("set",self.color["user_a"])])
+            self.leds[3][1].set_anim([("set",self.color["user_a"])])
+            self.leds[4][1].set_anim([("set",self.color["user_a"])])
+            self.leds[5][1].set_anim([("set",self.color["user_a"])])
+            self.leds[6][1].set_anim([("set",self.color["user_a"])])
+            self.leds[7][1].set_anim([("set",self.color["user_a"])])
+        elif anim == "user_s_menu":
+            self.leds[0][1].set_anim([("set",self.color["user_s"])])
+            self.leds[1][1].set_anim([("set",self.color["user_s"])])
+            self.leds[2][1].set_anim([("set",self.color["user_s"])])
+            self.leds[3][1].set_anim([("set",self.color["user_s"])])
+            self.leds[4][1].set_anim([("set",self.color["user_s"])])
+            self.leds[5][1].set_anim([("set",self.color["user_s"])])
+            self.leds[6][1].set_anim([("set",self.color["user_s"])])
+            self.leds[7][1].set_anim([("set",self.color["user_s"])])
         elif anim == "podcast_menu":
             self.leds[0][1].set_anim([("set",(0,255,0,0,255))])
             self.leds[1][1].set_anim([("set",(0,255,255,255,255))])

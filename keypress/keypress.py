@@ -2,7 +2,6 @@
 
 import copy
 import itertools
-import sys
 
 #epsilon state
 class EState:

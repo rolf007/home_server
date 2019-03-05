@@ -1,30 +1,23 @@
 
-def fuzzy_substring(needle, haystack):
-    """Calculates the fuzzy match of needle in haystack,
-    using a modified version of the Levenshtein distance
-    algorithm.
-    The function is modified from the levenshtein function
-    in the bktree module by Adam Hupp"""
+class Levenshtein():
+    def __init__(self, del_cost, ins_cost, sub_cost):
+        self.del_cost = del_cost
+        self.ins_cost = ins_cost
+        self.sub_cost = sub_cost
 
-    m, n = len(needle), len(haystack)
-
-    # base cases
-    if m == 1:
-        return not needle in haystack
-    if not n:
-        return m
-
-    row1 = [0] * (n+1)
-    for i in range(0,m):
-        row2 = [i+1]
-        for j in range(0,n):
-            cost = ( needle[i] != haystack[j] )
-
-            row2.append( min(row1[j+1]+1, # deletion
-                               row2[j]+1, #insertion
-                               row1[j]+cost) #substitution
-                           )
-        row1 = row2
-    return min(row1)
-
-
+    def distance(self, needle, haystack):
+        # del_cost = penalty for not typing part of the text (user is just lazy)
+        # ins_cost = penalty for typing something thats not in the text
+        # sub_cost = penalty for typing something wrong
+        for i in range(-1, len(needle)):
+            current_row = [(i+1)*self.ins_cost]
+            for j in range(0, len(haystack)):
+                deletion = current_row[j] + self.del_cost
+                if i == -1:
+                    current_row.append(deletion)
+                else:
+                    insertion = previous_row[j + 1] + self.ins_cost
+                    substitution = previous_row[j] + (needle[i] != haystack[j])*self.sub_cost
+                    current_row.append(min(insertion, deletion, substitution))
+            previous_row = current_row
+        return previous_row[-1]
