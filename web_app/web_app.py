@@ -89,7 +89,7 @@ function stop() {
             content += button("play_list", "'metal'", "Rolf")
         elif peername[0] == '192.168.0.13':
             content += "<h2>Velkommen Karen</h2><br>"
-            content += button("play_list", "'svensk'", "Ulf Lundell & Bo Kasper")
+        content += button("play_list", "'svensk'", "Ulf Lundell & Bo Kasper")
         content += button("stop", "", "Stop")
         content += "<input name=\"title\" id=\"filter\" />\n"
         content += button("play", "", "Play")
@@ -128,8 +128,7 @@ function poll()
       var songs = JSON.parse(data);
     } catch(e) {
       console.log("bad json");
-      polling = 1;
-      setTimeout(poll, 1000);
+      console.log(data)
       return;
     }
     if (songs.status == "available") {
@@ -146,7 +145,10 @@ function poll()
       polling = 1;
       setTimeout(poll, 50);
     }
-
+  }).fail(function(jq){
+      console.log("failure");
+      console.log(jq.responseText);
+      console.log(jq.status);
   });
 };
 """
@@ -164,9 +166,8 @@ function poll()
         res = self.comm.call("music_server", "stop", {})
         res = self.comm.call("stream_receiver", "off", {})
         res = self.comm.call("led", "set", {"anim": ["off"]})
-        text=res[1]
         headers = {'content-type': 'text/html'}
-        return web.Response(headers=headers, text=text)
+        return web.Response(headers=headers, status=res[0], text=res[1])
 
     async def radio(self, request):
         print("calling radio!")
@@ -174,42 +175,28 @@ function poll()
         res = self.comm.call("music_server", "stop", {})
         res = self.comm.call("stream_receiver", "radio", args)
         res = self.comm.call("led", "set", {"anim": ["tu"]})
-        text=res[1]
         headers = {'content-type': 'text/html'}
-        return web.Response(headers=headers, text=text)
+        return web.Response(headers=headers, status=res[0], text=res[1])
 
     async def play(self, request):
-        source = request.rel_url.query['source']
-        if source == 'list':
-            query = request.rel_url.query['query']
-            res = self.comm.call("music_server", "play", {"source":[source], "query":[query]})
-            res = self.comm.call("stream_receiver", "multicast", {})
-            res = self.comm.call("led", "set", {"anim": ["mp"]})
-            text=res[1]
-        elif source == 'collection':
-            title = request.rel_url.query['title']
-            res = self.comm.call("music_server", "play", {"source":[source], "title":[title]})
-            res = self.comm.call("stream_receiver", "multicast", {})
-            res = self.comm.call("led", "set", {"anim": ["mp"]})
-            text=res[1]
-        else:
-            text = "source error"
+        args = multi_dict_to_dict_of_lists(request.rel_url.query)
+        res = self.comm.call("music_server", "play", args)
+        res = self.comm.call("stream_receiver", "multicast", {})
+        res = self.comm.call("led", "set", {"anim": ["mp"]})
         headers = {'content-type': 'text/html'}
-        return web.Response(headers=headers, text=text)
+        return web.Response(headers=headers, status=res[0], text=res[1])
 
     async def search(self, request):
         args = multi_dict_to_dict_of_lists(request.rel_url.query)
         res = self.comm.call("music_server", "search", args)
-        text=res[1]
         headers = {'content-type': 'text/html'}
-        return web.Response(headers=headers, text=text)
+        return web.Response(headers=headers, status=res[0], text=res[1])
 
     async def get_search_result(self, request):
         args = multi_dict_to_dict_of_lists(request.rel_url.query)
         res = self.comm.call("music_server", "get_search_result", args)
-        text=res[1]
         headers = {'content-type': 'text/html'}
-        return web.Response(headers=headers, text=text)
+        return web.Response(headers=headers, status=res[0], text=res[1])
 
     def shut_down(self):
         print("begin stopping")

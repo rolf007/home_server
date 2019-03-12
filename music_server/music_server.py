@@ -601,6 +601,7 @@ class MusicServer():
         self.mode = "music"
 
     def play_list(self, params):
+        self.logger.log("play_list '%s'" % params)
         if "query" not in params:
             return (404, "if 'source' is 'list', 'query' is a required argument to 'play'")
         query = params["query"][0]
@@ -612,7 +613,7 @@ class MusicServer():
         self.vlc_thread.stop()
         for q in qs:
             session_id = str(uuid.uuid4())
-            self.music_collection.start_search(self.play_list_resolve_cb, params, session_id)
+            self.music_collection.start_search(self.play_list_resolve_cb, q, session_id)
         #if sort == "shuffle":
         #    random.shuffle(filenames)
         return (200, "succesfully requsted to play a predefined playlist")
