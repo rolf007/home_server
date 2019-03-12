@@ -7,6 +7,7 @@ import struct
 import sys
 import threading
 import time
+from multi_dict_to_dict_of_lists import multi_dict_to_dict_of_lists
 from aiohttp import web
 
 class UnicastListener():
@@ -37,11 +38,7 @@ class UnicastListener():
             headers = {'content-type': 'text/json'}
             d = request.rel_url.query
             # Convert MultiDict 'd' to dict of lists 'e':
-            e = {}
-            for kv in d.items():
-                if kv[0] not in e:
-                    e[kv[0]] = []
-                e[kv[0]].append(kv[1])
+            e = multi_dict_to_dict_of_lists(d)
             ret = self.cb(request.path[1:], e, ip, port)
             return web.Response(headers=headers, text=ret[1], status=ret[0])
         except Exception as e:
@@ -65,11 +62,14 @@ class UnicastSender():
 
     def send(self, ip, port, function, args):
         req = "http://%s:%s/%s%s" % (ip, port, function, self.args_to_html(args))
-        resp0 = requests.get(req)
-        if resp0.ok:
-            return (200, resp0.text)
-        else:
-            return (405, resp0.text)
+        try:
+            resp0 = requests.get(req)
+            if resp0.ok:
+                return (200, resp0.text)
+            else:
+                return (405, resp0.text)
+        except:
+            return (406, "exception occured")
 
 class MulticastListener():
     def __init__(self, cb, logger, exc_cb):
@@ -171,7 +171,7 @@ class Comm():
         return ip
 
     def uc_received(self, path, params, ip, port):
-        self.logger.log("uc_received: '%s(%s)' from '%s:%d'" % (path, str(params), ip, port))
+        #self.logger.log("uc_received: '%s(%s)' from '%s:%d'" % (path, str(params), ip, port))
         if path in self.functions:
             return self.functions[path](params)
         return (404, "Unknown function '%s'" % path)

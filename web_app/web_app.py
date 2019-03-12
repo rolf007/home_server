@@ -3,12 +3,14 @@
 import asyncio
 import os
 import sys
+import uuid
 from aiohttp import web
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
 sys.path.append(os.path.join(home_server_root, "comm"))
 sys.path.append(os.path.join(home_server_root, "utils"))
 from comm import Comm
+from multi_dict_to_dict_of_lists import multi_dict_to_dict_of_lists
 from micro_service import MicroServiceHandler
 
 minimal_head = """
@@ -36,6 +38,7 @@ class WebApp:
         app.add_routes([web.get('/', self.main_menu),
                         web.get('/stop', self.stop),
                         web.get('/search', self.search),
+                        web.get('/get_search_result', self.get_search_result),
                         web.get('/play', self.play),
                         web.get('/radio', self.radio),
                         web.get('/music', self.music_menu),
@@ -73,7 +76,7 @@ function stop() {
         text = "<!DOCTYPE html>" + html
         peername = request.transport.get_extra_info('peername')
         print("peername:", peername)
-    
+
         headers = {'content-type': 'text/html'}
         return web.Response(headers=headers, text=text)
 
@@ -91,7 +94,8 @@ function stop() {
         content += "<input name=\"title\" id=\"filter\" />\n"
         content += button("play", "", "Play")
         content += "<ol id=\"fruits\"></ol>\n"
-        scripts = """
+        scripts = "session_id ={session_id};".format(session_id = '"' + str(uuid.uuid4()) +'"')
+        scripts += """
 function play_list(playlist_name) {
   $.get("/play", {source:"list", query:playlist_name});
 }
@@ -102,22 +106,49 @@ function play() {
   var title = document.getElementById('filter').value
   $.get("/play", {source:"collection", title:title});
 }
+
+polling = 0
 $('#filter').keyup(function() {
-  var query = document.getElementById('filter').value
-  $.get("/search", {title:query}, function(data, status){
-    document.getElementById("fruits").innerHTML = "";
-    var songs = JSON.parse(data);
-    for (var key in songs) {
-      var linode = document.createElement("LI");
-      var divnode = document.createElement("DIV");
-      var textnode = document.createTextNode(songs[key]["artist"] + " - " + songs[key]["title"]);
-      linode.appendChild(divnode);
-      divnode.appendChild(textnode);
-      divnode.setAttribute("title", key);
-      document.getElementById("fruits").appendChild(linode);
+  var query = document.getElementById('filter').value;
+  $.get("/search", {title:query, session_id:session_id}, function(data0, status){
+    //var n_res = JSON.parse(data0);
+    if (!polling) {
+      polling = 1;
+      setTimeout(poll, 50);
     }
   });
 });
+
+function poll()
+{
+  $.get("/get_search_result", {session_id:session_id}, function(data, status){
+    polling = 0;
+    document.getElementById("fruits").innerHTML = "";
+    try {
+      var songs = JSON.parse(data);
+    } catch(e) {
+      console.log("bad json");
+      polling = 1;
+      setTimeout(poll, 1000);
+      return;
+    }
+    if (songs.status == "available") {
+      for (var key in songs.result) {
+        var linode = document.createElement("LI");
+        var divnode = document.createElement("DIV");
+        var textnode = document.createTextNode(songs.result[key]["artist"] + " - " + songs.result[key]["title"]);
+        linode.appendChild(divnode);
+        divnode.appendChild(textnode);
+        divnode.setAttribute("title", key);
+        document.getElementById("fruits").appendChild(linode);
+      }
+    } else if (songs.status == "in_progress") {
+      polling = 1;
+      setTimeout(poll, 50);
+    }
+
+  });
+};
 """
 
         head = tag("head", minimal_head)
@@ -139,9 +170,9 @@ $('#filter').keyup(function() {
 
     async def radio(self, request):
         print("calling radio!")
-        channel = request.rel_url.query['channel']
+        args = multi_dict_to_dict_of_lists(request.rel_url.query)
         res = self.comm.call("music_server", "stop", {})
-        res = self.comm.call("stream_receiver", "radio", {"channel":[channel]})
+        res = self.comm.call("stream_receiver", "radio", args)
         res = self.comm.call("led", "set", {"anim": ["tu"]})
         text=res[1]
         headers = {'content-type': 'text/html'}
@@ -167,8 +198,15 @@ $('#filter').keyup(function() {
         return web.Response(headers=headers, text=text)
 
     async def search(self, request):
-        title = request.rel_url.query['title']
-        res = self.comm.call("music_server", "search", {"title":[title]})
+        args = multi_dict_to_dict_of_lists(request.rel_url.query)
+        res = self.comm.call("music_server", "search", args)
+        text=res[1]
+        headers = {'content-type': 'text/html'}
+        return web.Response(headers=headers, text=text)
+
+    async def get_search_result(self, request):
+        args = multi_dict_to_dict_of_lists(request.rel_url.query)
+        res = self.comm.call("music_server", "get_search_result", args)
         text=res[1]
         headers = {'content-type': 'text/html'}
         return web.Response(headers=headers, text=text)

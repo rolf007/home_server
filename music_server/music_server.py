@@ -15,6 +15,7 @@ from os.path import isfile, join
 import pty
 import random
 import re
+import uuid
 import youtube_dl_wrapper
 
 home_server_root = os.path.split(sys.path[0])[0]
@@ -25,6 +26,7 @@ from comm import Comm
 from mkdirp import mkdirp
 from fuzzy_substring import Levenshtein
 from micro_service import MicroServiceHandler
+from timer import Loop
 
 class VlcThread():
     def __init__(self, logger):
@@ -261,6 +263,46 @@ class MusicCollection():
         self.logger = logger
         self.music_collection = collection
         self.logger.log("music collection loaded %d tracks" % len(self.music_collection))
+        self.searches = {}
+
+    def start_search(self, resolve_cb, params, session_id):
+        if session_id in self.searches:
+            self.searches[session_id].cancel()
+        self.searches[session_id] = Search(self.music_collection.items(), resolve_cb, params, session_id)
+
+    def get_search_status(self, session_id):
+        if session_id not in self.searches:
+            return "not_available"
+        if self.searches[session_id].status == "done":
+            return "available"
+        if self.searches[session_id].status == "in_progress":
+            return "in_progress"
+        return "not_available"
+
+    def get_search_result(self, session_id):
+        if session_id not in self.searches:
+            return None
+        ret = self.searches[session_id].search_results
+        del self.searches[session_id]
+        return ret
+
+    def get_all_info(self, urls):
+        return {url:self.music_collection[url] for url in urls}
+
+class Search(Loop):
+    def __init__(self, ittr, resolve_cb, params, session_id):
+        super(Search, self).__init__(ittr)
+        self.resolve_cb = resolve_cb
+        self.params = params
+        self.session_id = session_id
+        self.levenshtein = Levenshtein(1, 10, 10)
+        self.total_score = {}
+        self.status = "in_progress"
+        self.search_results = []
+
+    def cancel(self):
+        self.status = "cancelled"
+        self.stop
 
     def parse_flags(self, query):
         flags = {"case_sensitive": False, "negate": False, "match_type": "fuzzy"}
@@ -303,77 +345,62 @@ class MusicCollection():
         except:
             return None
 
-
-    def resolve_query(self, params):
-        levenshtein = Levenshtein(1, 10, 10)
-        total_score = {}
-        for url, music in self.music_collection.items():
-            valid = True
-            score = 0
-            for keyword in ["title", "artist", "album", "genre", "release"]:
-                if keyword in params and keyword in music:
-                    collection_kw = music[keyword]
-                    for query_kw in params[keyword]:
-                        if not collection_kw:
+    async def body(self, i):
+        valid = True
+        score = 0
+        url, music = i
+        params = self.params
+        for keyword in ["title", "artist", "album", "genre", "release"]:
+            if keyword in params and keyword in music:
+                collection_kw = music[keyword]
+                for query_kw in params[keyword]:
+                    if not collection_kw:
+                        valid = False
+                        break
+                    query, flags = self.parse_flags(query_kw)
+                    if flags["match_type"] == "exact":
+                        if self.negate(self.case(query, flags) != self.case(collection_kw, flags), flags):
                             valid = False
-                            break
-                        query, flags = self.parse_flags(query_kw)
-                        if flags["match_type"] == "exact":
-                            if self.negate(self.case(query, flags) != self.case(collection_kw, flags), flags):
+                    elif flags["match_type"] == "range":
+                        splt = query.split('-')
+                        if len(splt) != 2:
+                            continue
+                        range_min = self.safe_to_int(splt[0])
+                        range_max = self.safe_to_int(splt[1])
+                        value = self.safe_to_int(collection_kw)
+                        if value is None:
+                            continue
+                        if self.negate(range_max is not None and value > range_max or range_min is not None and value < range_min, flags):
+                            valid = False
+                    elif flags["match_type"] == "regex":
+                        try:
+                            m = re.search(self.case(query, flags), self.case(collection_kw, flags))
+                            if self.negate(not m, flags):
                                 valid = False
-                        elif flags["match_type"] == "range":
-                            splt = query.split('-')
-                            if len(splt) != 2:
-                                continue
-                            range_min = self.safe_to_int(splt[0])
-                            range_max = self.safe_to_int(splt[1])
-                            value = self.safe_to_int(collection_kw)
-                            if value is None:
-                                continue
-                            if self.negate(range_max is not None and value > range_max or range_min is not None and value < range_min, flags):
-                                valid = False
-                        elif flags["match_type"] == "regex":
-                            try:
-                                m = re.search(self.case(query, flags), self.case(collection_kw, flags))
-                                if self.negate(not m, flags):
-                                    valid = False
-                            except re.error:
-                                valid = False
-                        else:
-                            score += levenshtein.distance(self.case(query_kw, flags), self.case(collection_kw, flags))
-                if not valid:
-                    break
-            if valid:
-                total_score[url] = score
+                        except re.error:
+                            valid = False
+                    else:
+                        score += self.levenshtein.distance(self.case(query_kw, flags), self.case(collection_kw, flags))
+            if not valid:
+                break
+        if valid:
+            self.total_score[url] = score
 
-        if len(total_score) == 0:
+    def done(self):
+        if len(self.total_score) == 0:
             return []
-        a_min = min(total_score, key=total_score.get)
-        best_score = total_score[a_min]
-        urls = [url for url, score in total_score.items() if score == best_score]
+        a_min = min(self.total_score, key=self.total_score.get)
+        best_score = self.total_score[a_min]
+        #for e, s in self.total_score.items():
+        #    print(e, s)
+        urls = [url for url, score in self.total_score.items() if score == best_score]
         limit = 20
         if len(urls) > limit:
             urls = urls[:limit]
-        return urls
+        self.search_results = urls
+        self.resolve_cb(self.session_id)
+        self.status = "done"
 
-    def get_all_info(self, urls):
-        return {url:self.music_collection[url] for url in urls}
-
-    def getPrettyName(self, url):
-        if url in self.music_collection:
-            track = self.music_collection[url]
-            artist = track["artist"] if "artist" in track else None
-            title = track["title"] if "title" in track else None
-            if title == None and artist == None:
-                return "unknown"
-            elif title == None:
-                return artist
-            elif artist == None:
-                return title
-            else:
-                return "%s - %s" % (artist, title)
-        else:
-            return "unknown2"
 
 class MusicServer():
     def __init__(self, logger, exc_cb):
@@ -383,7 +410,7 @@ class MusicServer():
         self.playlists = load_playlists(self.logger)
         self.vlc_thread = VlcThread(self.logger)
         self.podcaster = Podcaster()
-        self.comm = Comm(5001, "music_server", {"play": self.play, "search": self.search, "podcast": self.podcast, "skip": self.skip, "stop": self.stop, "tag": self.tag}, self.logger, exc_cb)
+        self.comm = Comm(5001, "music_server", {"play": self.play, "search": self.search, "get_search_result": self.get_search_result, "podcast": self.podcast, "skip": self.skip, "stop": self.stop, "tag": self.tag}, self.logger, exc_cb)
         self.mode = "stopped"
 
 
@@ -496,16 +523,35 @@ class MusicServer():
 #    no prefix means fuzzy match (modified Levenshtein distance). Use '|' for 'or'
 
 # sort: first by artist, then by release, then by album, then by track_number, finally by title.
+
+    def search_resolve_cb(self, session_id):
+        pass
+
     def search(self, params):
+        #self.logger.log("search begin: %s " % params)
         if ("source" in params):
             source = params["source"][0]
         else:
             source = "collection"
+        if ("session_id" not in params):
+            return (404, "'session_id' is required for 'search'" % source)
+        session_id = params["session_id"][0]
         if source == "collection":
-            urls = self.music_collection.resolve_query(params)
-            results = self.music_collection.get_all_info(urls)
-            return (200, "%s" % json.dumps(results))
+            self.music_collection.start_search(self.search_resolve_cb, params, session_id)
+            return (200, "%s" % "search started ok!")
         return (404, "Source must be 'collection', 'youtube' or 'list' (%s)" % source)
+
+    def get_search_result(self, params):
+        #self.logger.log("get_search_result: %s " % params)
+        if ("session_id" not in params):
+            return (404, "'session_id' is required for 'get_search_result'" % source)
+        session_id = params["session_id"][0]
+        status = self.music_collection.get_search_status(session_id)
+        if status == "available":
+            j = json.dumps({"status": status, "result": self.music_collection.get_all_info(self.music_collection.get_search_result(session_id))})
+        else:
+            j = json.dumps({"status": status})
+        return (200, j)
 
     def play(self, params):
         if ("source" in params):
@@ -520,15 +566,19 @@ class MusicServer():
             return self.play_list(params)
         return (404, "Source must be 'collection', 'youtube' or 'list' (%s)" % source)
 
-    def play_collection(self, params):
-        filenames = self.music_collection.resolve_query(params)
-        if len(filenames) == 0:
-            return (404, "no matches")
-        self.vlc_thread.enqueue(filenames, 'c')
+    def play_collection_resolve_cb(self, session_id):
+        self.logger.log("play_collection_resolve_cb: %s " % session_id)
+        urls = self.music_collection.get_search_result(session_id)
+        if len(urls) == 0:
+            return
+        self.vlc_thread.enqueue(urls, 'c')
         self.mode = "music"
-        if len(filenames) == 1:
-            return (200, "playing: '%s'" % self.music_collection.getPrettyName(filenames[0]))
-        return (200, "playing: '%s' songs" % len(filenames))
+
+    def play_collection(self, params):
+        self.logger.log("play_collection: %s " % params)
+        session_id = str(uuid.uuid4())
+        self.music_collection.start_search(self.play_collection_resolve_cb, params, session_id)
+        return (200, "succesfully requested music from collection")
 
 
     def play_youtube(self, params):
@@ -542,6 +592,14 @@ class MusicServer():
         print("youtube playing: '%s'" % name)
         return (200, "playing name '%s'" % name)
 
+    def play_list_resolve_cb(self, session_id):
+        self.logger.log("play_list_resolve_cb: %s " % session_id)
+        urls = self.music_collection.get_search_result(session_id)
+        if len(urls) == 0:
+            return
+        self.vlc_thread.enqueue(urls, 'q')
+        self.mode = "music"
+
     def play_list(self, params):
         if "query" not in params:
             return (404, "if 'source' is 'list', 'query' is a required argument to 'play'")
@@ -551,13 +609,13 @@ class MusicServer():
         playlist = self.playlists[query]
         qs = playlist["queries"]
         sort = None if "sort" not in playlist else playlist["sort"]
-        filenames = []
+        self.vlc_thread.stop()
         for q in qs:
-            filenames += self.music_collection.resolve_query(q)
-        if sort == "shuffle":
-            random.shuffle(filenames)
-        self.vlc_thread.enqueue(filenames, 'c')
-        return (200, "playing list '%s' containing '%d' songs" % (query, len(filenames)))
+            session_id = str(uuid.uuid4())
+            self.music_collection.start_search(self.play_list_resolve_cb, params, session_id)
+        #if sort == "shuffle":
+        #    random.shuffle(filenames)
+        return (200, "succesfully requsted to play a predefined playlist")
 
 
     def shut_down(self):
