@@ -184,33 +184,117 @@ class Podcaster():
         self.episodes = None
         self.cur_episode = None
         self.program_name = None
+        self.programs = {}
+
+    def add_podcast(self, nick, name, url, regex):
+        if nick is None:
+            nick = name
+        self.programs[nick] = { "name": name, "url": url, "regex": regex }
+
+    def add_24syv_podcast(self, name, id, nick=None):
+#https://www.24syv.dk/programmer
+        regex_24syv = "<enclosure url=\"(https://arkiv.radio24syv.dk/.*/.*/.*/audio/podcast/.*-audio.(?:mp3|m4a))\""
+        self.add_podcast(nick, name, "https://arkiv.radio24syv.dk/audiopodcast/channel/" + str(id), regex_24syv)
+
+    def add_dr_podcast(self, name, nick=None):
+#https://www.dr.dk/allepodcast/?letter=
+        regex_dr = "<enclosure url=\"(https://www.dr.dk/mu/MediaRedirector/WithFileExtension/.*.mp3\\?highestBitrate=True&amp;podcastDownload=True)\""
+        self.add_podcast(nick, name, "https://www.dr.dk/mu/feed/"+name+".xml?format=podcast", regex_dr)
 
     def podcast(self, params):
-        programs = {
-            "d6m": {
-                "name": "Den_Sjete_Masseuddoen",
-                "url": "https://arkiv.radio24syv.dk/audiopodcast/channel/27580524",
-                "regex": "<enclosure url=\"(https://arkiv.radio24syv.dk/.*/.*/.*/audio/podcast/.*-audio.(?:mp3|m4a))\"",
-            }, "baelte": {
-                "name": "Baeltestedet",
-                "url": "https://arkiv.radio24syv.dk/audiopodcast/channel/8741566",
-                "regex": "<enclosure url=\"(https://arkiv.radio24syv.dk/.*/.*/.*/audio/podcast/.*-audio.(?:mp3|m4a))\"",
-            }, "orientering": {
-                "name": "Orientering",
-                "url": "https://www.dr.dk/mu/feed/orientering.xml?format=podcast&limit=500",
-                "regex": "<enclosure url=\"(https://www.dr.dk/mu/MediaRedirector/WithFileExtension/.*.mp3\\?highestBitrate=True&amp;podcastDownload=True)\"",
-            }, "mads": {
-                "name": "Mads_og_Monopolet",
-                "url": "https://www.dr.dk/mu/Feed/mads-monopolet-podcast?format=podcast&limit=500",
-                "regex": "<enclosure url=\"(https://www.dr.dk/mu/MediaRedirector/WithFileExtension/.*.mp3\\?highestBitrate=True&amp;podcastDownload=True)\"",
-            }
-        }
+        self.add_podcast("lir", "Forhjulslir", "https://forhjulslir.libsyn.com/rss", "<enclosure length=\"[0-9]+\" type=\"audio/mpeg\" url=\"(https://traffic.libsyn.com/secure/forhjulslir/.*.mp3\\?dest-id=[0-9]+)\" />")
+
+        self.add_dr_podcast("orientering")
+        self.add_dr_podcast("mads-monopolet-podcast", "mads")
+        self.add_dr_podcast("bagklog-pa-p1")
+        self.add_dr_podcast("4-division")
+        self.add_dr_podcast("sidste-mand-slukker-lyset")
+        self.add_dr_podcast("audiens")
+        self.add_dr_podcast("foelg-pengene")
+        self.add_dr_podcast("klimatestamentet")
+        self.add_dr_podcast("ugens-gaest-p1")
+        self.add_dr_podcast("bagklog-pa-p1")
+        self.add_dr_podcast("klog-pa-sprog")
+        self.add_dr_podcast("slotsholmen")
+        self.add_dr_podcast("gudstjeneste-radio")
+        self.add_dr_podcast("mands-minde-foredrag")
+        self.add_dr_podcast("4-division")
+        self.add_dr_podcast("de-hoejere-magter")
+        self.add_dr_podcast("verdenspressen")
+        self.add_dr_podcast("shitstorm")
+        self.add_dr_podcast("public-service")
+        self.add_dr_podcast("digitalt")
+        self.add_dr_podcast("supertanker")
+        self.add_dr_podcast("kulturen-pa-p1")
+        self.add_dr_podcast("radiofortaellinger")
+        self.add_dr_podcast("p1-debat")
+        self.add_dr_podcast("tidsaand")
+        self.add_dr_podcast("p1-dokumentar")
+        self.add_dr_podcast("hjernekassen-pa-p1")
+        self.add_dr_podcast("mennesker-og-medier")
+        self.add_dr_podcast("verden-ifoelge-gram")
+        self.add_dr_podcast("filmland")
+        self.add_dr_podcast("p1-morgen")
+        self.add_dr_podcast("skoenlitteratur-pa-p1")
+        self.add_dr_podcast("orientering")
+        self.add_dr_podcast("baglandet")
+        self.add_24syv_podcast("Den_Sjete_Masseuddoen", 27580524, "d6m")
+        self.add_24syv_podcast("Baeltestedet", 8741566, "baelte")
+        self.add_24syv_podcast("genialos", 4184863)
+        self.add_24syv_podcast("abernes-planet", 27984455)
+        self.add_24syv_podcast("den-sjette-masseuddoeen", 27580524)
+        self.add_24syv_podcast("genialos", 4184863)
+        self.add_24syv_podcast("tibet-papirerne", 27748091)
+        self.add_24syv_podcast("hitlers-aeseloerer", 11777576)
+        self.add_24syv_podcast("spoerge-joergen", 12592536)
+        self.add_24syv_podcast("24-spoergsmaal-til-professoren", 13973671)
+        self.add_24syv_podcast("24syv-dokumentar", 3887302)
+        self.add_24syv_podcast("24syv-morgen", 3843763)
+        self.add_24syv_podcast("24syv-nyheder", 3561248)
+        self.add_24syv_podcast("55-minutter", 16512232)
+        self.add_24syv_podcast("aflyttet", 4466232)
+        self.add_24syv_podcast("ak-24syv", 3843145)
+        self.add_24syv_podcast("baeltestedet", 8741566)
+        self.add_24syv_podcast("croque-monsieur", 11929746)
+        self.add_24syv_podcast("datolinjen", 4945795)
+        self.add_24syv_podcast("den-korte-radioavis", 10839671)
+        self.add_24syv_podcast("det-naeste-kapitel", 12132345)
+        self.add_24syv_podcast("det-roede-felt", 8373634)
+        self.add_24syv_podcast("det-vi-taler-om", 10327258)
+        self.add_24syv_podcast("efter-otte", 8633895)
+        self.add_24syv_podcast("elektronista", 3843152)
+        self.add_24syv_podcast("er-du-sunshine", 13967997)
+        self.add_24syv_podcast("europa-i-flammer", 4643454)
+        self.add_24syv_podcast("fedeabes-fyraften", 16512250)
+        self.add_24syv_podcast("finnsk-terapi", 10685650)
+        self.add_24syv_podcast("fitness-mk", 11777621)
+        self.add_24syv_podcast("flaskens-aand", 3843405)
+        self.add_24syv_podcast("fodbold-fm", 3843776)
+        self.add_24syv_podcast("foraeldreintra", 13973585)
+        self.add_24syv_podcast("ghetto-fitness", 26967854)
+        self.add_24syv_podcast("globus", 3778761)
+        self.add_24syv_podcast("huxi-og-det-gode-gamle-folketing", 6555368)
+        self.add_24syv_podcast("jeppesens-bibelskole", 12391837)
+        self.add_24syv_podcast("kampagnesporet", 13965705)
+        self.add_24syv_podcast("kina-snak", 7560743)
+        self.add_24syv_podcast("mikrofonholder", 3843770)
+        self.add_24syv_podcast("millionaerklubben", 3784851)
+        self.add_24syv_podcast("nattevagten", 3843151)
+        self.add_24syv_podcast("pharaos-cigarer", 9760337)
+        self.add_24syv_podcast("politiradio", 12144388)
+        self.add_24syv_podcast("qa", 13976201)
+        self.add_24syv_podcast("raabaand", 3843225)
+        self.add_24syv_podcast("rene-linjer", 14632714)
+        self.add_24syv_podcast("romerriget", 3973425)
+        self.add_24syv_podcast("rushys-roulette", 6563547)
+        self.add_24syv_podcast("soendagspolitikken", 8629629)
+        self.add_24syv_podcast("winthertid", 17937754)
 
         if "program" not in params:
             return (404, "for 'podcast', 'program' is a required argument"), None
         program = params["program"][0]
-        if program in programs:
-            program_info = programs[program]
+        if program in self.programs:
+            program_info = self.programs[program]
             p = subprocess.Popen("wget \"%s\" -O -" % program_info["url"], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, stderr = p.communicate()
             if p.returncode != 0:
