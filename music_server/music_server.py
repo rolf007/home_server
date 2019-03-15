@@ -17,6 +17,7 @@ import random
 import re
 import uuid
 import youtube_dl_wrapper
+import time
 
 home_server_root = os.path.split(sys.path[0])[0]
 home_server_config = os.path.join(os.path.split(home_server_root)[0], "home_server_config", os.path.split(sys.path[0])[1])
@@ -349,10 +350,11 @@ class MusicCollection():
         self.logger.log("music collection loaded %d tracks" % len(self.music_collection))
         self.searches = {}
 
-    def start_search(self, resolve_cb, params, session_id):
+    def start_search(self, resolve_cb, params, session_id, asynch=True):
         if session_id in self.searches:
             self.searches[session_id].cancel()
         self.searches[session_id] = Search(self.music_collection.items(), resolve_cb, params, session_id)
+        self.searches[session_id].start(asynch)
 
     def get_search_status(self, session_id):
         if session_id not in self.searches:
@@ -383,10 +385,14 @@ class Search(Loop):
         self.total_score = {}
         self.status = "in_progress"
         self.search_results = []
+        self.count = 0
+        self.count2 = 0
+        self.start_time = time.time()
+        self.best_score = 1000000000
 
     def cancel(self):
         self.status = "cancelled"
-        self.stop
+        self.stop()
 
     def parse_flags(self, query):
         flags = {"case_sensitive": False, "negate": False, "match_type": "fuzzy"}
@@ -395,13 +401,13 @@ class Search(Loop):
         if query[0] == '!':
             flags["negate"] = True
             query = query[1:]
-        if len(query) == 0:
-            return query, flags
+            if len(query) == 0:
+                return query, flags
         if query[0] == ':':
             flags["case_sensitive"] = True
             query = query[1:]
-        if len(query) == 0:
-            return query, flags
+            if len(query) == 0:
+                return query, flags
         if query[0] == ',':
             flags["match_type"] = "exact"
             query = query[1:]
@@ -429,7 +435,12 @@ class Search(Loop):
         except:
             return None
 
-    async def body(self, i):
+    def body(self, i):
+        self.count += 1
+        old = self.count2
+        self.count2 = int(self.count/1730)
+        if old != self.count2:
+            print("count: %d %s" % (self.count2, self.params))
         valid = True
         score = 0
         url, music = i
@@ -464,13 +475,22 @@ class Search(Loop):
                         except re.error:
                             valid = False
                     else:
-                        score += self.levenshtein.distance(self.case(query_kw, flags), self.case(collection_kw, flags))
+                        leven = self.levenshtein.distance(self.case(query, flags), self.case(collection_kw, flags),self.best_score-score)
+                        if leven is not None:
+                            score += leven
+                        else:
+                            valid = False
             if not valid:
                 break
         if valid:
+            if score <= self.best_score:
+                self.best_score = score
+                print(url)
             self.total_score[url] = score
 
     def done(self):
+        self.end_time = time.time()
+        print("duration: %s" % (self.end_time - self.start_time))
         if len(self.total_score) == 0:
             return []
         a_min = min(self.total_score, key=self.total_score.get)

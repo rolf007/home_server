@@ -19,10 +19,33 @@ class Loop:
         self.ittr = ittr.__iter__()
         self.stopped = False
 
-        self._task = asyncio.ensure_future(self._job())
+    def start(self, asynch=True):
+        if asynch:
+            self._task = asyncio.ensure_future(self._job())
+        else:
+            self._job2()
 
     def stop(self):
         self.stopped = True
+
+    async def foo(self, x):
+        self.body(x)
+
+    def _job2(self):
+        if self.stopped:
+            return
+        try:
+            i = self.ittr.__next__()
+            print(i)
+        except StopIteration:
+            print("done")
+            self.done()
+            return
+        try:
+            self.body(i)
+        except Exception as e:
+            print(e)
+        self._job2()
 
     async def _job(self):
         if self.stopped:
@@ -33,7 +56,7 @@ class Loop:
             self.done()
             return
         try:
-            await self.body(i)
+            await self.foo(i)
         except Exception as e:
             print(e)
         self._task = asyncio.ensure_future(self._job())

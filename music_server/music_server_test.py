@@ -9,6 +9,9 @@ class TestMusicServer(unittest.TestCase):
     def setUp(self):
         pass
 
+    def eq(self, music_collection, expected, search):
+        music_collection.start_search(lambda session_id: self.assertEqual(set(expected), set(music_collection.get_search_result(session_id))), search, 1, False)
+
     def test_simple_title_search(self):
         logger = Logger("music_server")
         music_collection = MusicCollection(logger, {
@@ -17,8 +20,8 @@ class TestMusicServer(unittest.TestCase):
             "/foo/metallica - sanitarium.mp3":{ "artist": "metallica", "title": "Sanitarium"},
             "/foo/metallica - for whom the bells toll.mp3":{ "artist": "metallica", "title": "Fro whom the Bells Toll"}
             })
-        next_song = music_collection.resolve_query({"title": ["sani"]})
-        self.assertEqual(["/foo/metallica - sanitarium.mp3"], next_song)
+        self.eq(music_collection, ["/foo/metallica - sanitarium.mp3"], {"title": ["sani"]})
+
 
     def test_search_artist_and_title(self):
         logger = Logger("music_server")
@@ -27,8 +30,7 @@ class TestMusicServer(unittest.TestCase):
             "/foo/yngwie malmsteen - pictures of home.mp3":{ "artist": "yngwie malmsteen", "title": "Pictures of Home"},
             "/foo/yngwie malmsteen - gates of babylon.mp3":{ "artist": "yngwie malmsteen", "title": "Gates of Babylon"}
             })
-        next_song = music_collection.resolve_query({"title": ["gates of babylon"], "artist": ["yngwie malmsteen"]})
-        self.assertEqual(["/foo/yngwie malmsteen - gates of babylon.mp3"], next_song)
+        self.eq(music_collection, ["/foo/yngwie malmsteen - gates of babylon.mp3"], {"title": ["gates of babylon"], "artist": ["yngwie malmsteen"]})
 
     def test_double_title_search(self):
         logger = Logger("music_server")
@@ -37,8 +39,7 @@ class TestMusicServer(unittest.TestCase):
             "/foo/metallica - cal of chtulu.mp3":{ "artist": "metallica", "title": "Cal of Chtulu"},
             "/foo/metallica - khtulu returns.mp3":{ "artist": "metallica", "title": "Ktulu Awakens"}
             })
-        next_song = music_collection.resolve_query({"title": ["Call", "Ktulu"]})
-        self.assertEqual(["/foo/metallica - cal of chtulu.mp3"], next_song)
+        self.eq(music_collection, ["/foo/metallica - cal of chtulu.mp3"], {"title": ["Call", "Ktulu"]})
 
     def test_equally_good_matches(self):
         logger = Logger("music_server")
@@ -49,8 +50,7 @@ class TestMusicServer(unittest.TestCase):
             "/foo/metallica - orion.mp3":{ "artist": "metallica", "title": "Orion"},
             "/foo/acdc - for those about to rock.mp3":{ "artist": "acdc", "title": "For Those about to Rock"}
             })
-        next_song = music_collection.resolve_query({"artist": ["metalliac"]})
-        self.assertEqual(set(["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3", "/foo/metallica - call of ktulu.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3", "/foo/metallica - call of ktulu.mp3"], {"artist": ["metalliac"]})
 
     def test_fuzzy_choose_shortest_match(self):
         logger = Logger("music_server")
@@ -59,8 +59,7 @@ class TestMusicServer(unittest.TestCase):
             "/foo/van halen - jump.mp3":{ "artist": "Van Halen", "title": "Jump"},
             "/foo/c64 - jumping jackson.mp3":{ "artist": "C64", "title": "Jumping Jackson"},
             })
-        next_song = music_collection.resolve_query({"title": ["jump"]})
-        self.assertEqual(set(["/foo/van halen - jump.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/van halen - jump.mp3"], {"title": ["jump"]})
 
     def test_exact_match(self):
         logger = Logger("music_server")
@@ -72,20 +71,15 @@ class TestMusicServer(unittest.TestCase):
             "/foo/acdc - for those about to rock.mp3":{ "artist": "acdc", "title": "For Those about to Rock"}
             })
         # exact match - typo -> no matches
-        next_song = music_collection.resolve_query({"artist": [",metalliac"]})
-        self.assertEqual(set(), set(next_song))
+        self.eq(music_collection, [], {"artist": [",metalliac"]})
         # fuzzy match - typo -> multiple matches
-        next_song = music_collection.resolve_query({"artist": ["metalliac"]})
-        self.assertEqual(set(["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3", "/foo/metallica - call of ktulu.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3", "/foo/metallica - call of ktulu.mp3"], {"artist": ["metalliac"]})
         # exact match - no typo -> multiple matches
-        next_song = music_collection.resolve_query({"artist": [",metallica"]})
-        self.assertEqual(set(["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3", "/foo/metallica - call of ktulu.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3", "/foo/metallica - call of ktulu.mp3"], {"artist": [",metallica"]})
         # exact match - no typo case sensitive -> multiple matches
-        next_song = music_collection.resolve_query({"artist": [":,metallica"]})
-        self.assertEqual(set(["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/metallica - jump in the fire.mp3", "/foo/metallica - orion.mp3"], {"artist": [":,metallica"]})
         # negative exact match - no typo -> multiple matches
-        next_song = music_collection.resolve_query({"artist": ["!,metallica"]})
-        self.assertEqual(set(["/foo/iron maiden - the trooper.mp3", "/foo/acdc - for those about to rock.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/iron maiden - the trooper.mp3", "/foo/acdc - for those about to rock.mp3"], {"artist": ["!,metallica"]})
 
     def test_numeric_range_match(self):
         logger = Logger("music_server")
@@ -106,26 +100,19 @@ class TestMusicServer(unittest.TestCase):
             "/foo/iron maiden - futureal.mp3":{ "artist": "Iron Maiden", "title": "Futureal", "release": "1998"},
             })
         # songs from one specific year - one match
-        next_song = music_collection.resolve_query({"release": ["1984"]})
-        self.assertEqual(set(["/foo/iron maiden - aces high.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/iron maiden - aces high.mp3"], {"release": ["1984"]})
         # songs from one specific year - multiple matches
-        next_song = music_collection.resolve_query({"release": ["1993"]})
-        self.assertEqual(set(["/foo/iron maiden - tailgunner - LIVE.mp3", "/foo/iron maiden - prowler - LIVE.mp3", "/foo/iron maiden - sanctuary - LIVE.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/iron maiden - tailgunner - LIVE.mp3", "/foo/iron maiden - prowler - LIVE.mp3", "/foo/iron maiden - sanctuary - LIVE.mp3"], {"release": ["1993"]})
         # songs from range of years - exactly including
-        next_song = music_collection.resolve_query({"release": ["-1988-1992"]})
-        self.assertEqual(set(["/foo/iron maiden - moonchild.mp3", "/foo/iron maiden - tailgunner.mp3", "/foo/iron maiden - the fugitive.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/iron maiden - moonchild.mp3", "/foo/iron maiden - tailgunner.mp3", "/foo/iron maiden - the fugitive.mp3"], {"release": ["-1988-1992"]})
         # songs from range of years - exactly not including
-        next_song = music_collection.resolve_query({"release": ["-1989-1991"]})
-        self.assertEqual(set(["/foo/iron maiden - tailgunner.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/iron maiden - tailgunner.mp3"], {"release": ["-1989-1991"]})
         # songs from open range of years: up to specific year
-        next_song = music_collection.resolve_query({"release": ["--1982"]})
-        self.assertEqual(set(["/foo/iron maiden - killers.mp3", "/foo/iron maiden - prowler.mp3", "/foo/iron maiden - gangland.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/iron maiden - killers.mp3", "/foo/iron maiden - prowler.mp3", "/foo/iron maiden - gangland.mp3"], {"release": ["--1982"]})
         # songs from open range of years: from specific year
-        next_song = music_collection.resolve_query({"release": ["-1995-"]})
-        self.assertEqual(set(["/foo/iron maiden - 2 a.m..mp3", "/foo/iron maiden - futureal.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/iron maiden - 2 a.m..mp3", "/foo/iron maiden - futureal.mp3"], {"release": ["-1995-"]})
         # songs NOT from range of years
-        next_song = music_collection.resolve_query({"release": ["!-1981-1995"]})
-        self.assertEqual(set(["/foo/iron maiden - prowler.mp3", "/foo/iron maiden - futureal.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/iron maiden - prowler.mp3", "/foo/iron maiden - futureal.mp3"], {"release": ["!-1981-1995"]})
 
     def test_regex_match(self):
         logger = Logger("music_server")
@@ -135,14 +122,10 @@ class TestMusicServer(unittest.TestCase):
             "/foo/black sabbath - iron man.mp3":{ "artist": "Black Sabbath", "title": "Iron Man"},
             "/foo/mark winholtz - ironman hymn.mp3":{ "artist": "Mark Winholtz", "title": "Ironman Hymn - Everything is Possible"},
             })
-        next_song = music_collection.resolve_query({"title": ["/^iron ma"]})
-        self.assertEqual(set(["/foo/iron maiden - iron maiden.mp3", "/foo/black sabbath - iron man.mp3"]), set(next_song))
-        next_song = music_collection.resolve_query({"title": ["/^iron\s*ma"]})
-        self.assertEqual(set(["/foo/iron maiden - iron maiden.mp3", "/foo/black sabbath - iron man.mp3", "/foo/mark winholtz - ironman hymn.mp3"]), set(next_song))
-        next_song = music_collection.resolve_query({"title": [":/^Iron\s*Ma"]})
-        self.assertEqual(set(["/foo/iron maiden - iron maiden.mp3", "/foo/black sabbath - iron man.mp3"]), set(next_song))
-        next_song = music_collection.resolve_query({"title": ["!:/^Iron\s*Ma"]})
-        self.assertEqual(set(["/foo/ramin djawadi - iron man theme.mp3", "/foo/mark winholtz - ironman hymn.mp3"]), set(next_song))
+        self.eq(music_collection, ["/foo/iron maiden - iron maiden.mp3", "/foo/black sabbath - iron man.mp3"], {"title": ["/^iron ma"]})
+        self.eq(music_collection, ["/foo/iron maiden - iron maiden.mp3", "/foo/black sabbath - iron man.mp3", "/foo/mark winholtz - ironman hymn.mp3"], {"title": ["/^iron\s*ma"]})
+        self.eq(music_collection, ["/foo/iron maiden - iron maiden.mp3", "/foo/black sabbath - iron man.mp3"], {"title": [":/^Iron\s*Ma"]})
+        self.eq(music_collection, ["/foo/ramin djawadi - iron man theme.mp3", "/foo/mark winholtz - ironman hymn.mp3"], {"title": ["!:/^Iron\s*Ma"]})
 
 
 if __name__ == '__main__':
