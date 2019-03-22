@@ -81,6 +81,7 @@ class VlcThread():
                 self.enqueue(filenames, 'q')
             else:
                 out = self.remote_control('add file://%s' % filenames[0])
+                filenames = filenames[1:]
                 last_id = self.get_last_playlist_id()
                 out = self.remote_control('move %d %d' % (last_id, cur_id))
 
@@ -100,8 +101,15 @@ class VlcThread():
                     last_id = self.get_last_playlist_id()
                     out = self.remote_control('move %d %d' % (last_id, id))
 
+    def next(self):
+        out = self.remote_control('next')
+
+    def prev(self):
+        out = self.remote_control('prev')
+
     def stop(self):
         out = self.remote_control('stop')
+        out = self.remote_control('clear')
 
     def get_cur_playlist_id(self):
         r = re.compile('^\|  \*([0-9]+).*')
