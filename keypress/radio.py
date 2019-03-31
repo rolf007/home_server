@@ -45,6 +45,7 @@ class Radio():
             KeyPress.compile(".C.c<match>", match=lambda: self.flow({"to": ["random"]})),
             KeyPress.compile(".D.d<match>", match=lambda: self.flow({"next": ["1"]})),
             KeyPress.compile(".E.e<match>", match=lambda: self.flow({"to": ["last"]})),
+            KeyPress.compile(".H.h<match>", match=lambda: self.stop()),
         ])
         self.playlist_menu = KeyPress.mkUnion([
             KeyPress.compile(".A.a<match>", match=lambda: self.go_to_users_playlist_menu("user_k")),
@@ -156,6 +157,12 @@ class Radio():
 
     def flow(self, skip):
         res = self.comm.call("music_server", "skip", skip)
+        self.leave_submenu()
+
+    def stop(self):
+        res = self.comm.call("music_server", "stop", {})
+        res = self.comm.call("stream_receiver", "off", {})
+        res = self.comm.call("led", "set", {"anim": ["off"]})
         self.leave_submenu()
 
     def knightrider(self):
