@@ -59,17 +59,17 @@ class EmojiParser():
         if query in self.shortcuts:
             return i+1, self.shortcuts[query]
         best_match = "?"
-        best_score = -1
+        best_score = 1000000
         for block in self.blocks:
             for u in range(block[0], block[1]):
                 try:
                     name = unicodedata.name(chr(u))
-                    score = levenshtein.distance(query.lower(), name.lower())
-                    if score < best_score or best_score == -1:
-                        best_score = score
-                        best_match = chr(u)
                 except:
                     pass
+                score = levenshtein.distance(query.lower(), name.lower(), best_score)
+                if score is not None and score < best_score:
+                    best_score = score
+                    best_match = chr(u)
         self.logger(unicodedata.name(best_match))
         return i+1, best_match
 

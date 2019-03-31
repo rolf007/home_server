@@ -53,7 +53,7 @@ class VlcThread():
         return out
 
     def remote_control(self, cmd):
-        print("fooascii: '%s'" % ascii(cmd))
+        self.logger.log("remote_control: '%s'" % ascii(cmd))
         # this fails if cmd contains non-ascii
         self.p.stdin.write(bytes(cmd+"\n", "ascii"))
         self.p.stdin.flush()
@@ -81,6 +81,7 @@ class VlcThread():
                 self.enqueue(filenames, 'q')
             else:
                 out = self.remote_control('add file://%s' % filenames[0])
+                filenames = filenames[1:]
                 last_id = self.get_last_playlist_id()
                 out = self.remote_control('move %d %d' % (last_id, cur_id))
 
@@ -100,8 +101,15 @@ class VlcThread():
                     last_id = self.get_last_playlist_id()
                     out = self.remote_control('move %d %d' % (last_id, id))
 
+    def next(self):
+        out = self.remote_control('next')
+
+    def prev(self):
+        out = self.remote_control('prev')
+
     def stop(self):
         out = self.remote_control('stop')
+        out = self.remote_control('clear')
 
     def get_cur_playlist_id(self):
         r = re.compile('^\|  \*([0-9]+).*')
@@ -111,6 +119,15 @@ class VlcThread():
             m = r.match(o)
             if m:
                 return int(m.group(1))
+        return None
+
+    def get_filename(self, id):
+        out = self.remote_control('info %d' % id)
+        r = re.compile('^\| filename: (.*)')
+        for o in out:
+            m = r.match(o)
+            if m:
+                return m.group(1)
         return None
 
     def get_last_playlist_id(self):
@@ -124,8 +141,31 @@ class VlcThread():
                 id = int(m.group(1))
         return id
 
+    def get_playlist(self):
+        id_list = []
+        out = self.remote_control('playlist')
+        r = re.compile('^\|  (\*| )([0-9]+).*')
+        for o in out:
+            m = r.match(o)
+            if m:
+                id_list.append(int(m.group(2)))
+        return id_list
+
+    def debug_playlist(self):
+        status_out = self.remote_control('status')
+        playlist_out = self.remote_control('playlist')
+        out = "status:\n"
+        for line in status_out:
+            if line != '\n':
+                out += line
+        out += "\nplaylist:\n"
+        for line in playlist_out:
+            if line != '\n':
+                out += line
+        return out
+
     def get_status(self):
-        r = re.compile('^\( (.*) \)$')
+        r = re.compile('^\( state (.*) \)$')
         out = self.remote_control('status')
 
         for o in out:
@@ -145,10 +185,12 @@ class VlcThread():
     def shut_down(self):
         if self.p == None:
             return
-        print("stopping serving music...")
-        self.p.terminate()
+        self.logger.log("stopping serving music...")
+        self.p.stdin.write(bytes("shutdown\n", "ascii"))
+        self.p.stdin.flush()
         print(self.p.communicate())
         self.p = None
+        self.stdout.close()
 
 
 def load_collection(logger):
@@ -514,7 +556,7 @@ class MusicServer():
         self.playlists = load_playlists(self.logger)
         self.vlc_thread = VlcThread(self.logger)
         self.podcaster = Podcaster()
-        self.comm = Comm(5001, "music_server", {"play": self.play, "search": self.search, "get_search_result": self.get_search_result, "podcast": self.podcast, "skip": self.skip, "stop": self.stop, "tag": self.tag}, self.logger, exc_cb)
+        self.comm = Comm(5001, "music_server", {"play": self.play, "search": self.search, "get_search_result": self.get_search_result, "debug_playlist": self.debug_playlist, "podcast": self.podcast, "skip": self.skip, "stop": self.stop, "tag": self.tag}, self.logger, exc_cb)
         self.mode = "stopped"
 
 
@@ -645,6 +687,10 @@ class MusicServer():
             return (200, "%s" % "search started ok!")
         return (404, "Source must be 'collection', 'youtube' or 'list' (%s)" % source)
 
+    def debug_playlist(self, params):
+        ret = self.vlc_thread.debug_playlist()
+        return (200, ret)
+
     def get_search_result(self, params):
         #self.logger.log("get_search_result: %s " % params)
         if ("session_id" not in params):
@@ -696,13 +742,21 @@ class MusicServer():
         print("youtube playing: '%s'" % name)
         return (200, "playing name '%s'" % name)
 
+    def play_list_searches_all_done(self):
+        if len(self.play_list_search_results) == 0:
+            return
+        if self.play_list_sort == "shuffle":
+            random.shuffle(self.play_list_search_results)
+        self.vlc_thread.enqueue(self.play_list_search_results, 'c')
+        self.mode = "music"
+
     def play_list_resolve_cb(self, session_id):
         self.logger.log("play_list_resolve_cb: %s " % session_id)
         urls = self.music_collection.get_search_result(session_id)
-        if len(urls) == 0:
-            return
-        self.vlc_thread.enqueue(urls, 'q')
-        self.mode = "music"
+        self.play_list_search_results += urls
+        self.play_list_searches.remove(session_id)
+        if len(self.play_list_searches) == 0:
+            self.play_list_searches_all_done()
 
     def play_list(self, params):
         self.logger.log("play_list '%s'" % params)
@@ -714,12 +768,13 @@ class MusicServer():
         playlist = self.playlists[query]
         qs = playlist["queries"]
         sort = None if "sort" not in playlist else playlist["sort"]
-        self.vlc_thread.stop()
+        self.play_list_searches = set()
+        self.play_list_search_results = []
+        self.play_list_sort = sort
         for q in qs:
             session_id = str(uuid.uuid4())
+            self.play_list_searches.add(session_id)
             self.music_collection.start_search(self.play_list_resolve_cb, q, session_id)
-        #if sort == "shuffle":
-        #    random.shuffle(filenames)
         return (200, "succesfully requsted to play a predefined playlist")
 
 
