@@ -51,9 +51,9 @@ def youtube_dl_wrapper(query, track = None, default_artist = None, default_album
             title = "unknown" if "title" not in e0 else e0["title"]
     youtube_path = os.path.join(home_server_config, "youtube")
     if artist:
-        youtube_path = os.path.join(youtube_path, artist)
+        youtube_path = os.path.join(youtube_path, filify(artist))
     if album:
-        youtube_path = os.path.join(youtube_path, album)
+        youtube_path = os.path.join(youtube_path, filify(album))
     mkdirp(youtube_path)
     if artist:
         name = "%s - %s.mp3" % (filify(artist), filify(title))
