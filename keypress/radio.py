@@ -23,7 +23,7 @@ class Radio():
             KeyPress.compile(".B.b<match>", match=lambda: self.multicast_play({"artist": ["bryan adams"], "title": ["summer of 69"]})),
             KeyPress.compile(".C.c<match>", match=lambda: self.go_to_radio_menu()),
             KeyPress.compile(".D.d<match>", match=lambda: self.multicast_play({"artist": ["volbeat"], "title": ["for evigt"]})),
-            KeyPress.compile(".E.e<match>", match=lambda: self.knightrider()),
+            KeyPress.compile(".E.e<match>", match=lambda: self.apple_dock()),
             KeyPress.compile(".F.f<match>", match=lambda: self.go_to_podcast_menu()),
             KeyPress.compile(".H.h<match>", match=lambda: self.go_to_flow_menu()),
         ])
@@ -79,7 +79,7 @@ class Radio():
         print("==== press 'H' for Flow control")
         print("==== press 'q' to quit")
         self.go_to_main_menu()
-        self.inputter.click_NAD_button(1)
+        self.inputter.click_NAD_button(3)
 
     def go_to_main_menu(self):
         print("going to main menu...")
@@ -131,7 +131,7 @@ class Radio():
         self.go_to_main_menu()
 
     def multicast_play(self, query):
-        self.inputter.click_NAD_button(1)
+        self.inputter.click_NAD_button(3)
         print("requesting '%s'" % query)
         res = self.comm.call("music_server", "play", query)
         print("res = %d %s" % res)
@@ -140,13 +140,13 @@ class Radio():
         self.leave_submenu()
 
     def radio_channel(self, channel):
-        self.inputter.click_NAD_button(1)
+        self.inputter.click_NAD_button(3)
         res = self.comm.call("stream_receiver", "radio", {"channel": [channel]})
         res = self.comm.call("led", "set", {"anim": ["tu"]})
         self.leave_submenu()
 
     def start_podcast(self, program):
-        self.inputter.click_NAD_button(1)
+        self.inputter.click_NAD_button(3)
         res = self.comm.call("led", "set", {"anim": ["vi_wait"]})
         print("requesting program '%s'" % program)
         res = self.comm.call("music_server", "podcast", {"program": [program]})
@@ -164,6 +164,10 @@ class Radio():
         res = self.comm.call("stream_receiver", "off", {})
         res = self.comm.call("led", "set", {"anim": ["off"]})
         self.leave_submenu()
+
+    def apple_dock(self):
+        print("apple_dock")
+        self.inputter.click_NAD_button(6)
 
     def knightrider(self):
         print("knightrider!")

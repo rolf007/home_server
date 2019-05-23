@@ -2,6 +2,7 @@ import os
 import time
 import sys
 from keypress_runner import KeyPressRunner
+from enum import Enum
 
 import RPi.GPIO as gpio
 
@@ -31,7 +32,7 @@ class RaspberryInputter():
         self.old_butts = (0,0,0,0,0,0,0,0)
         self.timer = Timer(0.02, self.main_loop)
 
-    def send_bit(b):
+    def send_bit(self, b):
         time.sleep(0.01)
         gpio.output(DIO,b)
         time.sleep(0.01)
@@ -40,16 +41,23 @@ class RaspberryInputter():
         gpio.output(CLK,0)
         time.sleep(0.01)
 
-    def push_NAD_button(n):
+    class NadButton(Enum):
+        DISC = 0
+        TUNER = 1
+        CD = 2
+        MP = 3
+        TAPE_MONITOR = 4
+        VIDEO = 5
+        AUX = 6
+        TONE_DEFEAT = 7
+
+    def push_NAD_button(self, n):
         gpio.setup(DIO,gpio.OUT)
-        send_bit(0)#DISC
-        send_bit(0)#TUNER
-        send_bit(0)#CD
-        send_bit(1)#MP
-        send_bit(0)#TAPE MONITOR
-        send_bit(0)#VIDEO
-        send_bit(0)#AUX
-        send_bit(0)#TONE DEFEAT
+        for butt in self.NadButton:
+            if butt.value == n:
+                self.send_bit(1)
+            else:
+                self.send_bit(0)
 
         time.sleep(0.01)
         gpio.output(LATCH,0)
@@ -57,14 +65,8 @@ class RaspberryInputter():
         gpio.output(LATCH,1)
         time.sleep(0.01)
 
-        send_bit(0)
-        send_bit(0)
-        send_bit(0)
-        send_bit(0)
-        send_bit(0)
-        send_bit(0)
-        send_bit(0)
-        send_bit(0)
+        for butt in self.NadButton:
+            self.send_bit(0)
 
         time.sleep(0.01)
         gpio.output(LATCH,0)
@@ -105,6 +107,7 @@ class RaspberryInputter():
     
     def click_NAD_button(self, n):
         print("clicking '%s'" % n)
+        self.push_NAD_button(n)
 
 
     async def main_loop(self):
