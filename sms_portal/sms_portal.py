@@ -281,11 +281,11 @@ class SmsPortal():
                     if mobile > 0:
                         self.do_send_sms(receivedfromphonenumber, res[1], mobile, tail)
                 else:
+                    err_msg = "%d: %s" % (res[0], res[1])
                     err = cmd_inst.err()
                     if err > 0:
-                        err_msg = "%d: %s" % (res[0], res[1])
                         self.do_send_sms(receivedfromphonenumber, err_msg, err, False)
-                        self.logger.log("Error: " + err_msg)
+                    self.logger.log("Error: " + err_msg)
         else:
             err_msg = "Unknown command '%s', called with '%s'" % (cmd, arglist)
             self.do_send_sms(receivedfromphonenumber, err_msg, 1, False)

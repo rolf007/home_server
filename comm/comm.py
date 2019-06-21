@@ -69,7 +69,7 @@ class UnicastSender():
             else:
                 return (405, resp0.text)
         except:
-            return (406, "exception occured")
+            return (406, "exception occured %s" % req)
 
 class MulticastListener():
     def __init__(self, cb, logger, exc_cb):
