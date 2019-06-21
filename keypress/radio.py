@@ -169,6 +169,7 @@ class Radio():
     def apple_dock(self):
         print("apple_dock")
         self.inputter.click_NAD_button(6)
+        res = self.comm.call("led", "set", {"anim": ["au"]})
 
     def knightrider(self):
         print("knightrider!")

@@ -219,6 +219,15 @@ class LedController():
             self.leds[5][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[6][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[7][0].set_anim([("set",(0,0,0,0,255))])
+        elif anim == "au":
+            self.leds[0][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[1][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[2][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[3][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[4][0].set_anim([("set",(10,0,0,255,255))])
+            self.leds[5][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[6][0].set_anim([("set",(0,0,0,0,255))])
+            self.leds[7][0].set_anim([("set",(0,0,0,0,255))])
         elif anim == "vi":
             self.leds[0][0].set_anim([("set",(0,0,0,0,255))])
             self.leds[1][0].set_anim([("set",(0,0,0,0,255))])
