@@ -139,6 +139,7 @@ class Comm():
         self.port = port
         self.service = service_name
         self.functions = functions
+        self.functions["netstatus"] = self.netstatus
         self.others = {}
         self.logger.log("logger just started")
         ok = False
@@ -157,6 +158,13 @@ class Comm():
         self.startup_timer = threading.Timer(start_sleep, self.startup)
         self.startup_timer.start()
         self.im_here_timer = None
+
+    def netstatus(self, params):
+        ret = ""
+        ret = self.ip + ", " + str(self.port) + ", " + self.service + str(list(self.functions.keys())) + "\n\n"
+        for other in self.others:
+            ret += str(other) + " " + str(self.others[other]) + "\n"
+        return (200, ret)
 
     def get_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
