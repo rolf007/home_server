@@ -593,7 +593,17 @@ class MusicServer():
                 self.vlc_thread.enqueue([filename], 'c')
             return ret
         elif self.mode == "music":
-            return (200, "skipping music not implemented yet")
+            if to is not None:
+                return (200, "skipping music to is not implemented yet")
+            else:
+                if delta == 1:
+                    self.vlc_thread.next()
+                    return (200, "skipping 1 succes")
+                elif delta == -1:
+                    self.vlc_thread.prev()
+                    return (200, "skipping -1 succes")
+                else:
+                    return (200, "skipping music delta must be 1 or -1")
         else:
             return (404, "Can't skip. Nothing is playing.")
 
