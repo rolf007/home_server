@@ -57,10 +57,11 @@ class Radio():
         ])
         self.user_playlist_menu = {}
         self.user_playlist_menu["user_k"] = KeyPress.mkUnion([
-            KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play({"source":"list", "query":"svensk"})),
+            KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play({"source":["list"], "query":["svensk"]})),
         ])
         self.user_playlist_menu["user_r"] = KeyPress.mkUnion([
-            KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play({"source":"list", "query":"metal"})),
+            KeyPress.compile(".A.a<match>", match=lambda: self.multicast_play({"source":["list"], "query":["metal"]})),
+            KeyPress.compile(".B.b<match>", match=lambda: self.multicast_play({"artist":["metallica"]})),
         ])
         self.user_playlist_menu["user_c"] = KeyPress.mkUnion([
         ])
